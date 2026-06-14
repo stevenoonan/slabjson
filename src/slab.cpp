@@ -182,28 +182,40 @@ Result<Slab::NodeId> Slab::allocate_node(ValueType type) noexcept
 
 Result<Slab::StringRef> Slab::store_string(std::string_view value) noexcept
 {
+    auto allocation = allocate_string(value.size());
+    if (!allocation) {
+        return allocation.error();
+    }
+    const StringRef ref = allocation.value();
+    if (!value.empty()) {
+        std::memmove(storage_.data() + ref.offset, value.data(), value.size());
+    }
+    return ref;
+}
+
+Result<Slab::StringRef> Slab::allocate_string(std::size_t length) noexcept
+{
     if (!valid_) {
         return Error{ErrorCode::InvalidArgument, 0};
     }
-    if (value.size() > std::numeric_limits<std::uint16_t>::max()) {
+    if (length > std::numeric_limits<std::uint16_t>::max()) {
         return Error{ErrorCode::StringCapacityExceeded, 0};
     }
 
-    const std::size_t node_bytes = static_cast<std::size_t>(node_count_) * sizeof(Node);
-    const std::size_t free_bytes = storage_.size() - string_bytes_used_ - node_bytes;
-    if (value.size() > free_bytes) {
+    const std::size_t node_bytes =
+        static_cast<std::size_t>(node_count_) * sizeof(Node);
+    const std::size_t free_bytes =
+        storage_.size() - string_bytes_used_ - node_bytes;
+    if (length > free_bytes) {
         return Error{ErrorCode::StringCapacityExceeded, 0};
     }
 
-    const std::size_t offset = storage_.size() - string_bytes_used_ - value.size();
-    if (!value.empty()) {
-        std::memmove(storage_.data() + offset, value.data(), value.size());
-    }
-    string_bytes_used_ += value.size();
-
+    const std::size_t offset =
+        storage_.size() - string_bytes_used_ - length;
+    string_bytes_used_ += length;
     return StringRef{
         static_cast<std::uint16_t>(offset),
-        static_cast<std::uint16_t>(value.size()),
+        static_cast<std::uint16_t>(length),
     };
 }
 

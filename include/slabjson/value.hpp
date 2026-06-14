@@ -7,6 +7,7 @@
 namespace slabjson {
 
 namespace detail {
+class Parser;
 class Serializer;
 }
 
@@ -51,6 +52,7 @@ private:
     std::uint32_t generation_{0};
 
     friend class Array;
+    friend class detail::Parser;
     friend class detail::Serializer;
     friend class Object;
     friend class Slab;

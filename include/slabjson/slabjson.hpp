@@ -3,6 +3,7 @@
 #include <slabjson/array.hpp>
 #include <slabjson/error.hpp>
 #include <slabjson/object.hpp>
+#include <slabjson/parse.hpp>
 #include <slabjson/result.hpp>
 #include <slabjson/serialize.hpp>
 #include <slabjson/slab.hpp>

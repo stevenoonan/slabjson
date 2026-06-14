@@ -12,6 +12,7 @@
 namespace slabjson {
 
 namespace detail {
+class Parser;
 class Serializer;
 }
 
@@ -80,6 +81,8 @@ private:
     };
 
     [[nodiscard]] Result<NodeId> allocate_node(ValueType type) noexcept;
+    [[nodiscard]] Result<StringRef> allocate_string(
+        std::size_t length) noexcept;
     [[nodiscard]] Result<StringRef> store_string(std::string_view value) noexcept;
     [[nodiscard]] bool can_allocate_node() const noexcept;
     [[nodiscard]] Result<void> validate_attachment(
@@ -104,6 +107,7 @@ private:
     bool valid_{false};
 
     friend class Array;
+    friend class detail::Parser;
     friend class detail::Serializer;
     friend class Object;
     friend class Value;
