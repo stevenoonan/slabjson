@@ -1,9 +1,11 @@
 #pragma once
 
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <span>
 #include <string_view>
+#include <type_traits>
 
 #include <slabjson/containers.hpp>
 #include <slabjson/result.hpp>
@@ -34,7 +36,26 @@ public:
 
     [[nodiscard]] Result<Value> make_null() noexcept;
     [[nodiscard]] Result<Value> make_bool(bool value) noexcept;
+    [[nodiscard]] Result<Value> make_number(std::int64_t value) noexcept;
+    [[nodiscard]] Result<Value> make_number(std::uint64_t value) noexcept;
     [[nodiscard]] Result<Value> make_number(double value) noexcept;
+
+    template <std::signed_integral T>
+        requires (!std::same_as<std::remove_cv_t<T>, bool>
+            && !std::same_as<std::remove_cv_t<T>, std::int64_t>)
+    [[nodiscard]] Result<Value> make_number(T value) noexcept
+    {
+        return make_number(static_cast<std::int64_t>(value));
+    }
+
+    template <std::unsigned_integral T>
+        requires (!std::same_as<std::remove_cv_t<T>, bool>
+            && !std::same_as<std::remove_cv_t<T>, std::uint64_t>)
+    [[nodiscard]] Result<Value> make_number(T value) noexcept
+    {
+        return make_number(static_cast<std::uint64_t>(value));
+    }
+
     [[nodiscard]] Result<Value> make_string(std::string_view value) noexcept;
     [[nodiscard]] Result<Object> make_object() noexcept;
     [[nodiscard]] Result<Array> make_array() noexcept;
@@ -56,17 +77,20 @@ private:
 
     union Payload {
         bool bool_value;
-        double number_value;
+        std::int64_t signed_integer;
+        std::uint64_t unsigned_integer;
+        double floating_point;
         StringRef string_value;
 
         constexpr Payload() noexcept
-            : number_value(0.0)
+            : unsigned_integer(0)
         {
         }
     };
 
     struct Node {
         ValueType type{ValueType::Null};
+        NumberKind number_kind{NumberKind::FloatingPoint};
         NodeId parent{kInvalidNodeId};
         NodeId first_child{kInvalidNodeId};
         NodeId last_child{kInvalidNodeId};
@@ -107,9 +131,11 @@ private:
     bool valid_{false};
 
     friend class Array;
+    friend class ArrayIterator;
     friend class detail::Parser;
     friend class detail::Serializer;
     friend class Object;
+    friend class ObjectIterator;
     friend class Value;
 };
 

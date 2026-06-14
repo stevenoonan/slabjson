@@ -110,14 +110,15 @@ The serializer emits short escapes for:
 
 Other bytes below `0x20` are emitted as lowercase `\u00xx` escapes.
 
-The forward slash is emitted without escaping. Non-control bytes, including
-UTF-8 bytes, are copied unchanged.
+The forward slash is emitted without escaping. Valid non-control UTF-8 bytes are
+copied unchanged. The native API hardening milestone adds validation before
+manual strings enter the slab and a defensive serializer validation pass.
 
 ## Number formatting
 
-Finite `double` values are formatted with `std::to_chars` using general format.
-This is locale-independent and produces a compact round-trippable
-representation.
+Floating-point values are formatted with `std::to_chars` using general format.
+The native API hardening milestone also preserves and formats signed and
+unsigned integer payloads exactly.
 
 JSON has no representation for NaN or positive or negative infinity.
 Attempting to size or serialize a non-finite number returns

@@ -208,22 +208,14 @@ int main()
             slab.make_number(std::numeric_limits<double>::quiet_NaN());
         auto infinity_result =
             slab.make_number(std::numeric_limits<double>::infinity());
-        CHECK(nan_result);
-        CHECK(infinity_result);
-
-        auto nan_size = slabjson::serialized_size(nan_result.value());
-        CHECK(!nan_size);
-        CHECK(nan_size.error().code == slabjson::ErrorCode::InvalidArgument);
-
-        std::array<char, 32> output;
-        output.fill('#');
-        auto infinity =
-            slabjson::serialize(infinity_result.value(), output);
-        CHECK(!infinity);
-        CHECK(infinity.error().code == slabjson::ErrorCode::InvalidArgument);
-        for (char character : output) {
-            CHECK(character == '#');
-        }
+        CHECK(!nan_result);
+        CHECK(!infinity_result);
+        CHECK(
+            nan_result.error().code
+            == slabjson::ErrorCode::NonFiniteNumber);
+        CHECK(
+            infinity_result.error().code
+            == slabjson::ErrorCode::NonFiniteNumber);
     }
 
     {

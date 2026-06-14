@@ -30,6 +30,9 @@ public:
         if (!slab_.valid()) {
             return Error{ErrorCode::InvalidArgument, 0};
         }
+        if (options_.max_depth > kMaxParserDepth) {
+            return Error{ErrorCode::InvalidArgument, 0};
+        }
         if (overlaps_slab()) {
             return Error{ErrorCode::InvalidArgument, 0};
         }
@@ -118,8 +121,10 @@ private:
     [[nodiscard]] Result<Value> parse_number() noexcept
     {
         const std::size_t start = position_;
+        const bool negative = input_[position_] == '-';
+        bool floating_point = false;
 
-        if (input_[position_] == '-') {
+        if (negative) {
             ++position_;
             if (position_ == input_.size()) {
                 return Error{ErrorCode::ParseInvalidNumber, position_};
@@ -143,6 +148,7 @@ private:
         }
 
         if (position_ < input_.size() && input_[position_] == '.') {
+            floating_point = true;
             ++position_;
             if (position_ == input_.size()
                 || !is_digit(input_[position_])) {
@@ -157,6 +163,7 @@ private:
         if (position_ < input_.size()
             && (input_[position_] == 'e'
                 || input_[position_] == 'E')) {
+            floating_point = true;
             ++position_;
             if (position_ < input_.size()
                 && (input_[position_] == '+'
@@ -173,9 +180,44 @@ private:
             }
         }
 
-        double number = 0.0;
         const char* first = input_.data() + start;
         const char* last = input_.data() + position_;
+
+        if (!floating_point) {
+            if (negative) {
+                std::int64_t number = 0;
+                const auto conversion =
+                    std::from_chars(first, last, number);
+                if (conversion.ec != std::errc{}
+                    || conversion.ptr != last) {
+                    return Error{ErrorCode::ParseInvalidNumber, start};
+                }
+                return with_offset(slab_.make_number(number), start);
+            }
+
+            std::int64_t signed_number = 0;
+            const auto signed_conversion =
+                std::from_chars(first, last, signed_number);
+            if (signed_conversion.ec == std::errc{}
+                && signed_conversion.ptr == last) {
+                return with_offset(
+                    slab_.make_number(signed_number),
+                    start);
+            }
+
+            std::uint64_t unsigned_number = 0;
+            const auto unsigned_conversion =
+                std::from_chars(first, last, unsigned_number);
+            if (unsigned_conversion.ec != std::errc{}
+                || unsigned_conversion.ptr != last) {
+                return Error{ErrorCode::ParseInvalidNumber, start};
+            }
+            return with_offset(
+                slab_.make_number(unsigned_number),
+                start);
+        }
+
+        double number = 0.0;
         const auto conversion = std::from_chars(
             first,
             last,
@@ -186,7 +228,6 @@ private:
             || !std::isfinite(number)) {
             return Error{ErrorCode::ParseInvalidNumber, start};
         }
-
         auto value = slab_.make_number(number);
         return with_offset(value, start);
     }

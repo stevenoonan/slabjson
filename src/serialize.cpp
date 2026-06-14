@@ -7,6 +7,7 @@
 #include <span>
 #include <string_view>
 
+#include <slabjson/detail/utf8.hpp>
 #include <slabjson/slab.hpp>
 
 namespace slabjson {
@@ -115,6 +116,8 @@ private:
             }
 
             switch (current->type) {
+            case ValueType::Invalid:
+                return Error{ErrorCode::InvalidHandle, 0};
             case ValueType::Null:
                 if (!writer.append("null")) {
                     return Error{ErrorCode::OutputCapacityExceeded, 0};
@@ -128,19 +131,21 @@ private:
                 break;
             case ValueType::Number: {
                 auto number_result =
-                    write_number(writer, current->payload.number_value);
+                    write_number(writer, *current);
                 if (!number_result) {
                     return number_result.error();
                 }
                 break;
             }
-            case ValueType::String:
-                if (!write_string(
-                        writer,
-                        slab_->view_string(current->payload.string_value))) {
-                    return Error{ErrorCode::OutputCapacityExceeded, 0};
+            case ValueType::String: {
+                auto string_result = write_string(
+                    writer,
+                    slab_->view_string(current->payload.string_value));
+                if (!string_result) {
+                    return string_result.error();
                 }
                 break;
+            }
             case ValueType::Array:
             case ValueType::Object: {
                 const bool is_object = current->type == ValueType::Object;
@@ -154,8 +159,12 @@ private:
                     if (child == nullptr || child->parent != current_id) {
                         return Error{ErrorCode::InternalError, 0};
                     }
-                    if (is_object && !write_member_prefix(writer, *child)) {
-                        return Error{ErrorCode::OutputCapacityExceeded, 0};
+                    if (is_object) {
+                        auto prefix_result =
+                            write_member_prefix(writer, *child);
+                        if (!prefix_result) {
+                            return prefix_result.error();
+                        }
                     }
                     current_id = current->first_child;
                     continue;
@@ -197,9 +206,12 @@ private:
                     if (!writer.append(',')) {
                         return Error{ErrorCode::OutputCapacityExceeded, 0};
                     }
-                    if (parent->type == ValueType::Object
-                        && !write_member_prefix(writer, *sibling)) {
-                        return Error{ErrorCode::OutputCapacityExceeded, 0};
+                    if (parent->type == ValueType::Object) {
+                        auto prefix_result =
+                            write_member_prefix(writer, *sibling);
+                        if (!prefix_result) {
+                            return prefix_result.error();
+                        }
                     }
                     current_id = current->next_sibling;
                     break;
@@ -216,18 +228,34 @@ private:
 
     [[nodiscard]] Result<void> write_number(
         Writer& writer,
-        double value) const noexcept
+        const Slab::Node& node) const noexcept
     {
-        if (!std::isfinite(value)) {
-            return Error{ErrorCode::InvalidArgument, 0};
-        }
-
         char buffer[64];
-        auto result = std::to_chars(
-            buffer,
-            buffer + sizeof(buffer),
-            value,
-            std::chars_format::general);
+        std::to_chars_result result{};
+        switch (node.number_kind) {
+        case NumberKind::SignedInteger:
+            result = std::to_chars(
+                buffer,
+                buffer + sizeof(buffer),
+                node.payload.signed_integer);
+            break;
+        case NumberKind::UnsignedInteger:
+            result = std::to_chars(
+                buffer,
+                buffer + sizeof(buffer),
+                node.payload.unsigned_integer);
+            break;
+        case NumberKind::FloatingPoint:
+            if (!std::isfinite(node.payload.floating_point)) {
+                return Error{ErrorCode::NonFiniteNumber, 0};
+            }
+            result = std::to_chars(
+                buffer,
+                buffer + sizeof(buffer),
+                node.payload.floating_point,
+                std::chars_format::general);
+            break;
+        }
         if (result.ec != std::errc{}) {
             return Error{ErrorCode::InternalError, 0};
         }
@@ -241,50 +269,53 @@ private:
         return {};
     }
 
-    [[nodiscard]] bool write_string(
+    [[nodiscard]] Result<void> write_string(
         Writer& writer,
         std::string_view value) const noexcept
     {
         static constexpr char kHex[] = "0123456789abcdef";
 
+        if (auto invalid = invalid_utf8_offset(value)) {
+            return Error{ErrorCode::InvalidUtf8, *invalid};
+        }
         if (!writer.append('"')) {
-            return false;
+            return Error{ErrorCode::OutputCapacityExceeded, 0};
         }
         for (unsigned char character : value) {
             switch (character) {
             case '"':
                 if (!writer.append("\\\"")) {
-                    return false;
+                    return Error{ErrorCode::OutputCapacityExceeded, 0};
                 }
                 break;
             case '\\':
                 if (!writer.append("\\\\")) {
-                    return false;
+                    return Error{ErrorCode::OutputCapacityExceeded, 0};
                 }
                 break;
             case '\b':
                 if (!writer.append("\\b")) {
-                    return false;
+                    return Error{ErrorCode::OutputCapacityExceeded, 0};
                 }
                 break;
             case '\f':
                 if (!writer.append("\\f")) {
-                    return false;
+                    return Error{ErrorCode::OutputCapacityExceeded, 0};
                 }
                 break;
             case '\n':
                 if (!writer.append("\\n")) {
-                    return false;
+                    return Error{ErrorCode::OutputCapacityExceeded, 0};
                 }
                 break;
             case '\r':
                 if (!writer.append("\\r")) {
-                    return false;
+                    return Error{ErrorCode::OutputCapacityExceeded, 0};
                 }
                 break;
             case '\t':
                 if (!writer.append("\\t")) {
-                    return false;
+                    return Error{ErrorCode::OutputCapacityExceeded, 0};
                 }
                 break;
             default:
@@ -299,23 +330,33 @@ private:
                     };
                     if (!writer.append(
                             std::string_view{escape, sizeof(escape)})) {
-                        return false;
+                        return Error{ErrorCode::OutputCapacityExceeded, 0};
                     }
                 } else if (!writer.append(static_cast<char>(character))) {
-                    return false;
+                    return Error{ErrorCode::OutputCapacityExceeded, 0};
                 }
                 break;
             }
         }
-        return writer.append('"');
+        if (!writer.append('"')) {
+            return Error{ErrorCode::OutputCapacityExceeded, 0};
+        }
+        return {};
     }
 
-    [[nodiscard]] bool write_member_prefix(
+    [[nodiscard]] Result<void> write_member_prefix(
         Writer& writer,
         const Slab::Node& child) const noexcept
     {
-        return write_string(writer, slab_->view_string(child.key))
-            && writer.append(':');
+        auto key_result =
+            write_string(writer, slab_->view_string(child.key));
+        if (!key_result) {
+            return key_result.error();
+        }
+        if (!writer.append(':')) {
+            return Error{ErrorCode::OutputCapacityExceeded, 0};
+        }
+        return {};
     }
 
     [[nodiscard]] bool overlaps_slab(std::span<char> output) const noexcept

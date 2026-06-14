@@ -22,7 +22,7 @@ ValueType Value::type() const noexcept
     const auto* node = slab_ == nullptr
         ? nullptr
         : slab_->node_for(id_, generation_);
-    return node == nullptr ? ValueType::Null : node->type;
+    return node == nullptr ? ValueType::Invalid : node->type;
 }
 
 bool Value::is_null() const noexcept
@@ -92,7 +92,52 @@ std::optional<double> Value::as_number() const noexcept
     if (node == nullptr || node->type != ValueType::Number) {
         return std::nullopt;
     }
-    return node->payload.number_value;
+    switch (node->number_kind) {
+    case NumberKind::SignedInteger:
+        return static_cast<double>(node->payload.signed_integer);
+    case NumberKind::UnsignedInteger:
+        return static_cast<double>(node->payload.unsigned_integer);
+    case NumberKind::FloatingPoint:
+        return node->payload.floating_point;
+    }
+    return std::nullopt;
+}
+
+std::optional<NumberKind> Value::number_kind() const noexcept
+{
+    const auto* node = slab_ == nullptr
+        ? nullptr
+        : slab_->node_for(id_, generation_);
+    if (node == nullptr || node->type != ValueType::Number) {
+        return std::nullopt;
+    }
+    return node->number_kind;
+}
+
+std::optional<std::int64_t> Value::as_int64() const noexcept
+{
+    const auto* node = slab_ == nullptr
+        ? nullptr
+        : slab_->node_for(id_, generation_);
+    if (node == nullptr
+        || node->type != ValueType::Number
+        || node->number_kind != NumberKind::SignedInteger) {
+        return std::nullopt;
+    }
+    return node->payload.signed_integer;
+}
+
+std::optional<std::uint64_t> Value::as_uint64() const noexcept
+{
+    const auto* node = slab_ == nullptr
+        ? nullptr
+        : slab_->node_for(id_, generation_);
+    if (node == nullptr
+        || node->type != ValueType::Number
+        || node->number_kind != NumberKind::UnsignedInteger) {
+        return std::nullopt;
+    }
+    return node->payload.unsigned_integer;
 }
 
 std::optional<std::string_view> Value::as_string() const noexcept

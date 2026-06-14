@@ -82,7 +82,7 @@ int main()
 
         auto missing_remove = root.remove("duplicate");
         CHECK(!missing_remove);
-        CHECK(missing_remove.error().code == slabjson::ErrorCode::InvalidArgument);
+        CHECK(missing_remove.error().code == slabjson::ErrorCode::NotFound);
 
         auto detached_result = slab.make_string("detached");
         CHECK(detached_result);
@@ -94,7 +94,7 @@ int main()
         auto second_parent = second_parent_result.value();
         auto already_attached = second_parent.add("again", detached);
         CHECK(!already_attached);
-        CHECK(already_attached.error().code == slabjson::ErrorCode::InvalidArgument);
+        CHECK(already_attached.error().code == slabjson::ErrorCode::AlreadyAttached);
         CHECK(root.remove("detached"));
         CHECK(second_parent.add("moved", detached));
         CHECK(second_parent.find("moved")->as_string().value_or("") == "detached");
@@ -104,11 +104,11 @@ int main()
         CHECK(foreign_result);
         auto foreign = root.add("foreign", foreign_result.value());
         CHECK(!foreign);
-        CHECK(foreign.error().code == slabjson::ErrorCode::InvalidArgument);
+        CHECK(foreign.error().code == slabjson::ErrorCode::CrossSlab);
 
         auto cycle = nested.add("root", root.value());
         CHECK(!cycle);
-        CHECK(cycle.error().code == slabjson::ErrorCode::InvalidArgument);
+        CHECK(cycle.error().code == slabjson::ErrorCode::CycleDetected);
 
         auto null_string = root.add("bad", static_cast<const char*>(nullptr));
         CHECK(!null_string);

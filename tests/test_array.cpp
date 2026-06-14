@@ -79,22 +79,22 @@ int main()
         auto second_array = second_array_result.value();
         auto already_attached = second_array.add(detached);
         CHECK(!already_attached);
-        CHECK(already_attached.error().code == slabjson::ErrorCode::InvalidArgument);
+        CHECK(already_attached.error().code == slabjson::ErrorCode::AlreadyAttached);
 
         auto self_cycle = second_array.add(second_array.value());
         CHECK(!self_cycle);
-        CHECK(self_cycle.error().code == slabjson::ErrorCode::InvalidArgument);
+        CHECK(self_cycle.error().code == slabjson::ErrorCode::CycleDetected);
 
         auto ancestor_cycle = nested.add(array.value());
         CHECK(!ancestor_cycle);
-        CHECK(ancestor_cycle.error().code == slabjson::ErrorCode::InvalidArgument);
+        CHECK(ancestor_cycle.error().code == slabjson::ErrorCode::CycleDetected);
 
         slabjson::StaticSlab<256> other_slab;
         auto foreign_result = other_slab.make_bool(false);
         CHECK(foreign_result);
         auto foreign = array.add(foreign_result.value());
         CHECK(!foreign);
-        CHECK(foreign.error().code == slabjson::ErrorCode::InvalidArgument);
+        CHECK(foreign.error().code == slabjson::ErrorCode::CrossSlab);
 
         auto null_string = array.add(static_cast<const char*>(nullptr));
         CHECK(!null_string);

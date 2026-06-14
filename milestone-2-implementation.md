@@ -56,8 +56,8 @@ array.add_object();
 array.add_array();
 ```
 
-Integer overloads store values as `double`, matching the numeric policy in the
-implementation plan.
+Integer overloads were initially stored as `double`. The native API hardening
+milestone supersedes this behavior with exact signed and unsigned storage.
 
 ## Handles and conversions
 

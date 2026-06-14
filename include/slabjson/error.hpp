@@ -10,6 +10,12 @@ enum class ErrorCode : std::uint8_t {
     InvalidArgument,
     InvalidHandle,
     TypeMismatch,
+    NotFound,
+    AlreadyAttached,
+    CrossSlab,
+    CycleDetected,
+    InvalidUtf8,
+    NonFiniteNumber,
 
     OutOfMemory,
     NodeCapacityExceeded,

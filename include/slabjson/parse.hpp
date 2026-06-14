@@ -10,8 +10,10 @@ namespace slabjson {
 
 class Slab;
 
+inline constexpr std::uint16_t kMaxParserDepth = 32;
+
 struct ParseOptions {
-    std::uint16_t max_depth{32};
+    std::uint16_t max_depth{kMaxParserDepth};
     bool allow_trailing_whitespace{true};
 };
 

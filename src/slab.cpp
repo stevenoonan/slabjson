@@ -1,10 +1,13 @@
 #include <slabjson/slab.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <limits>
 #include <memory>
 #include <new>
+
+#include <slabjson/detail/utf8.hpp>
 
 namespace slabjson {
 
@@ -95,13 +98,47 @@ Result<Value> Slab::make_bool(bool value) noexcept
 
 Result<Value> Slab::make_number(double value) noexcept
 {
+    if (!std::isfinite(value)) {
+        return Error{ErrorCode::NonFiniteNumber, 0};
+    }
+
     auto node_result = allocate_node(ValueType::Number);
     if (!node_result) {
         return node_result.error();
     }
 
     const NodeId id = node_result.value();
-    node_for(id, generation_)->payload.number_value = value;
+    Node* node = node_for(id, generation_);
+    node->number_kind = NumberKind::FloatingPoint;
+    node->payload.floating_point = value;
+    return make_value(id);
+}
+
+Result<Value> Slab::make_number(std::int64_t value) noexcept
+{
+    auto node_result = allocate_node(ValueType::Number);
+    if (!node_result) {
+        return node_result.error();
+    }
+
+    const NodeId id = node_result.value();
+    Node* node = node_for(id, generation_);
+    node->number_kind = NumberKind::SignedInteger;
+    node->payload.signed_integer = value;
+    return make_value(id);
+}
+
+Result<Value> Slab::make_number(std::uint64_t value) noexcept
+{
+    auto node_result = allocate_node(ValueType::Number);
+    if (!node_result) {
+        return node_result.error();
+    }
+
+    const NodeId id = node_result.value();
+    Node* node = node_for(id, generation_);
+    node->number_kind = NumberKind::UnsignedInteger;
+    node->payload.unsigned_integer = value;
     return make_value(id);
 }
 
@@ -112,6 +149,9 @@ Result<Value> Slab::make_string(std::string_view value) noexcept
     }
     if (value.size() > std::numeric_limits<std::uint16_t>::max()) {
         return Error{ErrorCode::StringCapacityExceeded, 0};
+    }
+    if (auto invalid = detail::invalid_utf8_offset(value)) {
+        return Error{ErrorCode::InvalidUtf8, *invalid};
     }
     if (!can_allocate_node()) {
         if (node_count_ == kInvalidNodeId) {
@@ -182,6 +222,10 @@ Result<Slab::NodeId> Slab::allocate_node(ValueType type) noexcept
 
 Result<Slab::StringRef> Slab::store_string(std::string_view value) noexcept
 {
+    if (auto invalid = detail::invalid_utf8_offset(value)) {
+        return Error{ErrorCode::InvalidUtf8, *invalid};
+    }
+
     auto allocation = allocate_string(value.size());
     if (!allocation) {
         return allocation.error();
@@ -248,7 +292,7 @@ Result<void> Slab::validate_attachment(
         || child.generation_ != generation_) {
         return child.slab_ == nullptr || child.slab_ == this
             ? Error{ErrorCode::InvalidHandle, 0}
-            : Error{ErrorCode::InvalidArgument, 0};
+            : Error{ErrorCode::CrossSlab, 0};
     }
 
     const Node* child_node = node_for(child.id_, child.generation_);
@@ -256,13 +300,13 @@ Result<void> Slab::validate_attachment(
         return Error{ErrorCode::InvalidHandle, 0};
     }
     if (child_node->parent != kInvalidNodeId) {
-        return Error{ErrorCode::InvalidArgument, 0};
+        return Error{ErrorCode::AlreadyAttached, 0};
     }
 
     NodeId ancestor = parent_id;
     while (ancestor != kInvalidNodeId) {
         if (ancestor == child.id_) {
-            return Error{ErrorCode::InvalidArgument, 0};
+            return Error{ErrorCode::CycleDetected, 0};
         }
         const Node* ancestor_node = node_for(ancestor, generation);
         if (ancestor_node == nullptr) {

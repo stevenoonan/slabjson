@@ -92,9 +92,10 @@ Number syntax supports:
 Leading zeros, incomplete fractions, and incomplete exponents return
 `ParseInvalidNumber`.
 
-Numbers are converted directly to `double` with `std::from_chars`. This avoids
-locale-dependent parsing and does not require a temporary NUL-terminated
-buffer. Values outside the finite `double` range are rejected.
+Numbers are converted with `std::from_chars`, avoiding locale-dependent parsing
+and temporary NUL-terminated buffers. The native API hardening milestone stores
+integer syntax exactly as `int64_t` or `uint64_t`; fraction and exponent syntax
+remains finite `double`.
 
 ## String and Unicode handling
 

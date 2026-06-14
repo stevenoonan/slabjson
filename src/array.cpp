@@ -85,14 +85,44 @@ Result<void> Array::add(bool bool_value) noexcept
     return {};
 }
 
-Result<void> Array::add(int number_value) noexcept
-{
-    return add(static_cast<double>(number_value));
-}
-
 Result<void> Array::add(std::int64_t number_value) noexcept
 {
-    return add(static_cast<double>(number_value));
+    if (!valid()) {
+        return Error{ErrorCode::InvalidHandle, 0};
+    }
+
+    const auto checkpoint = slab_->checkpoint();
+    auto value_result = slab_->make_number(number_value);
+    if (!value_result) {
+        return value_result.error();
+    }
+
+    auto add_result = add(value_result.value());
+    if (!add_result) {
+        slab_->rollback(checkpoint);
+        return add_result.error();
+    }
+    return {};
+}
+
+Result<void> Array::add(std::uint64_t number_value) noexcept
+{
+    if (!valid()) {
+        return Error{ErrorCode::InvalidHandle, 0};
+    }
+
+    const auto checkpoint = slab_->checkpoint();
+    auto value_result = slab_->make_number(number_value);
+    if (!value_result) {
+        return value_result.error();
+    }
+
+    auto add_result = add(value_result.value());
+    if (!add_result) {
+        slab_->rollback(checkpoint);
+        return add_result.error();
+    }
+    return {};
 }
 
 Result<void> Array::add(double number_value) noexcept
@@ -229,6 +259,30 @@ bool Array::empty() const noexcept
     return size() == 0;
 }
 
+Array::iterator Array::begin() const noexcept
+{
+    const auto* array_node = slab_ == nullptr
+        ? nullptr
+        : slab_->node_for(id_, generation_);
+    if (array_node == nullptr || array_node->type != ValueType::Array) {
+        return end();
+    }
+    return ArrayIterator{
+        slab_,
+        array_node->first_child,
+        generation_,
+    };
+}
+
+Array::iterator Array::end() const noexcept
+{
+    return ArrayIterator{
+        slab_,
+        Slab::kInvalidNodeId,
+        generation_,
+    };
+}
+
 Value Array::value() const noexcept
 {
     return Value{slab_, id_, generation_};
@@ -237,6 +291,41 @@ Value Array::value() const noexcept
 Array::operator Value() const noexcept
 {
     return value();
+}
+
+ArrayIterator::ArrayIterator(
+    Slab* slab,
+    NodeId id,
+    std::uint32_t generation) noexcept
+    : slab_(slab)
+    , id_(id)
+    , generation_(generation)
+{
+}
+
+Value ArrayIterator::operator*() const noexcept
+{
+    if (slab_ == nullptr
+        || slab_->node_for(id_, generation_) == nullptr) {
+        return Value{nullptr, 0, 0};
+    }
+    return Value{slab_, id_, generation_};
+}
+
+ArrayIterator& ArrayIterator::operator++() noexcept
+{
+    const auto* node = slab_ == nullptr
+        ? nullptr
+        : slab_->node_for(id_, generation_);
+    id_ = node == nullptr ? Slab::kInvalidNodeId : node->next_sibling;
+    return *this;
+}
+
+ArrayIterator ArrayIterator::operator++(int) noexcept
+{
+    ArrayIterator previous = *this;
+    ++(*this);
+    return previous;
 }
 
 } // namespace slabjson

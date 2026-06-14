@@ -218,12 +218,19 @@ public:
 
 ```cpp
 enum class ValueType : uint8_t {
+    Invalid,
     Null,
     Bool,
     Number,
     String,
     Array,
     Object
+};
+
+enum class NumberKind : uint8_t {
+    SignedInteger,
+    UnsignedInteger,
+    FloatingPoint
 };
 
 class Value {
@@ -238,6 +245,9 @@ public:
     bool is_object() const;
 
     std::optional<bool> as_bool() const;
+    std::optional<NumberKind> number_kind() const;
+    std::optional<int64_t> as_int64() const;
+    std::optional<uint64_t> as_uint64() const;
     std::optional<double> as_number() const;
     std::optional<std::string_view> as_string() const;
     std::optional<Array> as_array() const;
@@ -245,7 +255,12 @@ public:
 };
 ```
 
-For numeric handling in the first pass, store numbers as `double`. Later, consider preserving integer representation separately to avoid precision loss for large integers.
+Store signed integers, unsigned integers, and floating-point values distinctly.
+`as_number()` converts any numeric kind to `double` and may round large exact
+integers. Use the typed integer accessors when precision matters.
+
+Objects and arrays expose zero-allocation C++20 forward iterators. Object
+iteration yields a key and `Value`; array iteration yields `Value`.
 
 ## Error handling
 
@@ -261,6 +276,12 @@ enum class ErrorCode : uint8_t {
     InvalidArgument,
     InvalidHandle,
     TypeMismatch,
+    NotFound,
+    AlreadyAttached,
+    CrossSlab,
+    CycleDetected,
+    InvalidUtf8,
+    NonFiniteNumber,
 
     OutOfMemory,
     NodeCapacityExceeded,
@@ -329,6 +350,7 @@ struct StringRef {
 
 struct Node {
     NodeType type;
+    NumberKind number_kind;
 
     NodeId parent;
     NodeId first_child;
@@ -339,7 +361,9 @@ struct Node {
 
     union Payload {
         bool bool_value;
-        double number_value;
+        int64_t signed_integer;
+        uint64_t unsigned_integer;
+        double floating_point;
         StringRef string_value;
 
         Payload() {}
@@ -548,13 +572,15 @@ String escaping must handle:
 * `\r`
 * `\t`
 
-For non-control UTF-8 bytes, output as-is.
+Validate strings as UTF-8 when they enter the slab. For valid non-control UTF-8
+bytes, output them as-is.
 
 Number serialization:
 
-* First pass may use `snprintf` into a small fixed stack buffer.
-* Avoid locale-dependent formatting.
-* Use a format that round-trips reasonably, such as `%.17g` for `double`.
+* Use `std::to_chars` for locale-independent formatting.
+* Serialize integer payloads exactly.
+* Serialize finite `double` payloads using general format.
+* Reject NaN and infinity when values are created.
 
 ## Mutation and deletion
 
@@ -875,6 +901,22 @@ Implement:
 * depth limit
 
 Tests should prove valid JSON parses and invalid JSON fails cleanly.
+
+### Milestone 4.5: Native API hardening
+
+Implement before compatibility helpers:
+
+* exact signed, unsigned, and floating-point number storage
+* constrained integral construction overloads
+* UTF-8 validation for manually supplied strings and keys
+* object and array forward iterators
+* unambiguous invalid handle types
+* targeted mutation and validation error codes
+* assignable `Result<T>`
+* a published parser depth hard cap
+
+Tests should prove exact integer round trips, iterator behavior, UTF-8
+invariants, targeted errors, and parser stack bounds.
 
 ### Milestone 5: cJSON migration helpers
 

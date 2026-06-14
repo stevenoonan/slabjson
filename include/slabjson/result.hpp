@@ -49,16 +49,43 @@ public:
         }
     }
 
-    Result& operator=(const Result&) = delete;
-    Result& operator=(Result&&) = delete;
+    Result& operator=(const Result& other)
+    {
+        if (this == &other) {
+            return *this;
+        }
+
+        destroy_active();
+        has_value_ = other.has_value_;
+        if (has_value_) {
+            ::new (static_cast<void*>(&storage_.value)) T(other.storage_.value);
+        } else {
+            ::new (static_cast<void*>(&storage_.error)) Error(other.storage_.error);
+        }
+        return *this;
+    }
+
+    Result& operator=(Result&& other)
+        noexcept(noexcept(T(std::move(other.storage_.value))))
+    {
+        if (this == &other) {
+            return *this;
+        }
+
+        destroy_active();
+        has_value_ = other.has_value_;
+        if (has_value_) {
+            ::new (static_cast<void*>(&storage_.value))
+                T(std::move(other.storage_.value));
+        } else {
+            ::new (static_cast<void*>(&storage_.error)) Error(other.storage_.error);
+        }
+        return *this;
+    }
 
     ~Result()
     {
-        if (has_value_) {
-            storage_.value.~T();
-        } else {
-            storage_.error.~Error();
-        }
+        destroy_active();
     }
 
     [[nodiscard]] bool has_value() const noexcept
@@ -96,6 +123,15 @@ public:
     }
 
 private:
+    void destroy_active() noexcept
+    {
+        if (has_value_) {
+            storage_.value.~T();
+        } else {
+            storage_.error.~Error();
+        }
+    }
+
     union Storage {
         T value;
         Error error;

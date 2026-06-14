@@ -16,12 +16,19 @@ class Object;
 class Slab;
 
 enum class ValueType : std::uint8_t {
+    Invalid,
     Null,
     Bool,
     Number,
     String,
     Array,
     Object
+};
+
+enum class NumberKind : std::uint8_t {
+    SignedInteger,
+    UnsignedInteger,
+    FloatingPoint
 };
 
 class Value {
@@ -37,6 +44,10 @@ public:
     [[nodiscard]] bool is_object() const noexcept;
 
     [[nodiscard]] std::optional<bool> as_bool() const noexcept;
+    [[nodiscard]] std::optional<NumberKind> number_kind() const noexcept;
+    [[nodiscard]] std::optional<std::int64_t> as_int64() const noexcept;
+    [[nodiscard]] std::optional<std::uint64_t> as_uint64() const noexcept;
+    // Exact integers may be rounded when converted to double.
     [[nodiscard]] std::optional<double> as_number() const noexcept;
     [[nodiscard]] std::optional<std::string_view> as_string() const noexcept;
     [[nodiscard]] std::optional<Array> as_array() const noexcept;
@@ -52,9 +63,11 @@ private:
     std::uint32_t generation_{0};
 
     friend class Array;
+    friend class ArrayIterator;
     friend class detail::Parser;
     friend class detail::Serializer;
     friend class Object;
+    friend class ObjectIterator;
     friend class Slab;
 };
 

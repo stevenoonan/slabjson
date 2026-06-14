@@ -47,6 +47,9 @@ int main()
     auto number_value = number_result.value();
     CHECK(number_value.type() == slabjson::ValueType::Number);
     CHECK(number_value.is_number());
+    CHECK(
+        number_value.number_kind()
+        == slabjson::NumberKind::FloatingPoint);
     CHECK(std::abs(number_value.as_number().value_or(0.0) + 12.5) < 0.000001);
     CHECK(!number_value.as_string());
 
@@ -66,6 +69,7 @@ int main()
 
     slab.reset();
     CHECK(!null_value.valid());
+    CHECK(null_value.type() == slabjson::ValueType::Invalid);
     CHECK(!null_value.is_null());
     CHECK(!string_value.as_string());
 
