@@ -1033,6 +1033,24 @@ Logical delete and detach do not reclaim slab memory. `delete_all()` maps the
 cJSON tree-deletion lifecycle to `Slab::reset()` and invalidates every handle
 owned by that slab.
 
+### Milestone 7: cJSON performance and conformance suite
+
+Add optional host-side tooling behind `SLABJSON_BUILD_BENCHMARKS=ON`. Fetch
+pinned cJSON, Google Benchmark, JSONTestSuite, and nativejson-benchmark
+revisions only for benchmark builds. Generate deterministic compact and
+newline-formatted Twitter, CITM, and Canada subsets that fit
+`StaticSlab<65535>`; classify the original corpus documents as
+capacity-limited.
+
+Benchmark parse lifecycle, compact and formatted serialization, compact round
+trips, and recursive duplication after validating both implementations against
+case-sensitive cJSON semantic comparison. Add JSONTestSuite conformance
+reporting and a separate allocation/capacity CSV report using cJSON allocation
+hooks. Include one-iteration CTest smoke coverage for every benchmark family
+and a report target that writes five-repetition Google Benchmark JSON and
+memory data. Performance results are informational and have no pass/fail
+thresholds.
+
 ## Example target API
 
 This should compile when the first major milestones are done:
