@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <limits>
 #include <string_view>
 
 #include <slabjson/slabjson.hpp>
@@ -42,10 +43,11 @@ int main()
         CHECK(root.add("enabled", true));
         CHECK(root.add("count", 7));
         CHECK(root.add("wide", static_cast<std::int64_t>(123456)));
+        CHECK(root.add("unsigned", std::numeric_limits<std::uint64_t>::max()));
         CHECK(root.add("ratio", 2.5));
         CHECK(root.add_null("missing"));
 
-        CHECK(root.size() == 6);
+        CHECK(root.size() == 7);
         CHECK(root.contains("name"));
         CHECK(!root.contains("xame"));
         CHECK(root.find("name")->as_string().value_or("") == "sensor");
@@ -56,10 +58,37 @@ int main()
         CHECK(root.find("missing")->is_null());
         CHECK(!root.find("unknown"));
 
+        auto name = root.get_string("name");
+        CHECK(name);
+        CHECK(name.value() == "sensor");
+
+        auto enabled = root.get_bool("enabled");
+        CHECK(enabled);
+        CHECK(enabled.value());
+
+        auto count = root.get_int64("count");
+        CHECK(count);
+        CHECK(count.value() == 7);
+
+        auto unsigned_value = root.get_uint64("unsigned");
+        CHECK(unsigned_value);
+        CHECK(unsigned_value.value() == std::numeric_limits<std::uint64_t>::max());
+
+        auto ratio = root.get_number("ratio");
+        CHECK(ratio);
+        CHECK(ratio.value() == 2.5);
+
+        auto converted_count = root.get_number("count");
+        CHECK(converted_count);
+        CHECK(converted_count.value() == 7.0);
+
         auto nested_result = root.add_object("nested");
         CHECK(nested_result);
         auto nested = nested_result.value();
         CHECK(nested.add("value", 42));
+        auto nested_access = root.get_object("nested");
+        CHECK(nested_access);
+        CHECK(nested_access.value().get_int64("value").value() == 42);
         CHECK(root.find("nested")->as_object()->find("value")
                   ->as_number().value_or(0.0)
             == 42.0);
@@ -68,17 +97,58 @@ int main()
         CHECK(array_result);
         auto items = array_result.value();
         CHECK(items.add("first"));
+        auto items_access = root.get_array("items");
+        CHECK(items_access);
+        CHECK(items_access.value().at(0)->as_string().value_or("") == "first");
         CHECK(root.find("items")->as_array()->at(0)
                   ->as_string().value_or("")
             == "first");
 
         CHECK(root.add("duplicate", 1));
         CHECK(root.add("duplicate", 2));
+        CHECK(root.get_int64("duplicate").value() == 1);
         CHECK(root.find("duplicate")->as_number().value_or(0.0) == 1.0);
         CHECK(root.remove("duplicate"));
+        CHECK(root.get_int64("duplicate").value() == 2);
         CHECK(root.find("duplicate")->as_number().value_or(0.0) == 2.0);
         CHECK(root.remove("duplicate"));
         CHECK(!root.contains("duplicate"));
+
+        auto missing_get = root.get_string("unknown");
+        CHECK(!missing_get);
+        CHECK(missing_get.error().code == slabjson::ErrorCode::NotFound);
+
+        auto string_as_bool = root.get_bool("name");
+        CHECK(!string_as_bool);
+        CHECK(string_as_bool.error().code == slabjson::ErrorCode::TypeMismatch);
+
+        auto string_as_int64 = root.get_int64("name");
+        CHECK(!string_as_int64);
+        CHECK(string_as_int64.error().code == slabjson::ErrorCode::TypeMismatch);
+
+        auto unsigned_as_int64 = root.get_int64("unsigned");
+        CHECK(!unsigned_as_int64);
+        CHECK(unsigned_as_int64.error().code == slabjson::ErrorCode::TypeMismatch);
+
+        auto signed_as_uint64 = root.get_uint64("count");
+        CHECK(!signed_as_uint64);
+        CHECK(signed_as_uint64.error().code == slabjson::ErrorCode::TypeMismatch);
+
+        auto string_as_number = root.get_number("name");
+        CHECK(!string_as_number);
+        CHECK(string_as_number.error().code == slabjson::ErrorCode::TypeMismatch);
+
+        auto string_as_object = root.get_object("name");
+        CHECK(!string_as_object);
+        CHECK(string_as_object.error().code == slabjson::ErrorCode::TypeMismatch);
+
+        auto string_as_array = root.get_array("name");
+        CHECK(!string_as_array);
+        CHECK(string_as_array.error().code == slabjson::ErrorCode::TypeMismatch);
+
+        auto bool_as_string = root.get_string("enabled");
+        CHECK(!bool_as_string);
+        CHECK(bool_as_string.error().code == slabjson::ErrorCode::TypeMismatch);
 
         auto missing_remove = root.remove("duplicate");
         CHECK(!missing_remove);
@@ -118,6 +188,9 @@ int main()
         CHECK(!root.valid());
         CHECK(root.empty());
         CHECK(!root.find("name"));
+        auto stale_get = root.get_string("name");
+        CHECK(!stale_get);
+        CHECK(stale_get.error().code == slabjson::ErrorCode::InvalidHandle);
         auto stale_add = root.add("value", true);
         CHECK(!stale_add);
         CHECK(stale_add.error().code == slabjson::ErrorCode::InvalidHandle);

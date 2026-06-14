@@ -4,6 +4,25 @@
 
 namespace slabjson {
 
+namespace {
+
+Result<Value> find_required(
+    const Object& object,
+    std::string_view key) noexcept
+{
+    if (!object.valid()) {
+        return Error{ErrorCode::InvalidHandle, 0};
+    }
+
+    auto value = object.find(key);
+    if (!value) {
+        return Error{ErrorCode::NotFound, 0};
+    }
+    return *value;
+}
+
+} // namespace
+
 Object::Object(Slab* slab, NodeId id, std::uint32_t generation) noexcept
     : slab_(slab)
     , id_(id)
@@ -240,6 +259,107 @@ std::optional<Value> Object::find(std::string_view key) const noexcept
 bool Object::contains(std::string_view key) const noexcept
 {
     return find(key).has_value();
+}
+
+Result<std::string_view> Object::get_string(
+    std::string_view key) const noexcept
+{
+    auto value = find_required(*this, key);
+    if (!value) {
+        return value.error();
+    }
+
+    auto converted = value.value().as_string();
+    if (!converted) {
+        return Error{ErrorCode::TypeMismatch, 0};
+    }
+    return *converted;
+}
+
+Result<bool> Object::get_bool(std::string_view key) const noexcept
+{
+    auto value = find_required(*this, key);
+    if (!value) {
+        return value.error();
+    }
+
+    auto converted = value.value().as_bool();
+    if (!converted) {
+        return Error{ErrorCode::TypeMismatch, 0};
+    }
+    return *converted;
+}
+
+Result<std::int64_t> Object::get_int64(
+    std::string_view key) const noexcept
+{
+    auto value = find_required(*this, key);
+    if (!value) {
+        return value.error();
+    }
+
+    auto converted = value.value().as_int64();
+    if (!converted) {
+        return Error{ErrorCode::TypeMismatch, 0};
+    }
+    return *converted;
+}
+
+Result<std::uint64_t> Object::get_uint64(
+    std::string_view key) const noexcept
+{
+    auto value = find_required(*this, key);
+    if (!value) {
+        return value.error();
+    }
+
+    auto converted = value.value().as_uint64();
+    if (!converted) {
+        return Error{ErrorCode::TypeMismatch, 0};
+    }
+    return *converted;
+}
+
+Result<double> Object::get_number(std::string_view key) const noexcept
+{
+    auto value = find_required(*this, key);
+    if (!value) {
+        return value.error();
+    }
+
+    auto converted = value.value().as_number();
+    if (!converted) {
+        return Error{ErrorCode::TypeMismatch, 0};
+    }
+    return *converted;
+}
+
+Result<Object> Object::get_object(std::string_view key) const noexcept
+{
+    auto value = find_required(*this, key);
+    if (!value) {
+        return value.error();
+    }
+
+    auto converted = value.value().as_object();
+    if (!converted) {
+        return Error{ErrorCode::TypeMismatch, 0};
+    }
+    return *converted;
+}
+
+Result<Array> Object::get_array(std::string_view key) const noexcept
+{
+    auto value = find_required(*this, key);
+    if (!value) {
+        return value.error();
+    }
+
+    auto converted = value.value().as_array();
+    if (!converted) {
+        return Error{ErrorCode::TypeMismatch, 0};
+    }
+    return *converted;
 }
 
 Result<void> Object::remove(std::string_view key) noexcept

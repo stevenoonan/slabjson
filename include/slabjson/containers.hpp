@@ -128,6 +128,20 @@ public:
 
     [[nodiscard]] std::optional<Value> find(std::string_view key) const noexcept;
     [[nodiscard]] bool contains(std::string_view key) const noexcept;
+    [[nodiscard]] Result<std::string_view> get_string(
+        std::string_view key) const noexcept;
+    [[nodiscard]] Result<bool> get_bool(std::string_view key) const noexcept;
+    [[nodiscard]] Result<std::int64_t> get_int64(
+        std::string_view key) const noexcept;
+    [[nodiscard]] Result<std::uint64_t> get_uint64(
+        std::string_view key) const noexcept;
+    // Exact integers may be rounded when converted to double.
+    [[nodiscard]] Result<double> get_number(
+        std::string_view key) const noexcept;
+    [[nodiscard]] Result<Object> get_object(
+        std::string_view key) const noexcept;
+    [[nodiscard]] Result<Array> get_array(
+        std::string_view key) const noexcept;
     [[nodiscard]] Result<void> remove(std::string_view key) noexcept;
 
     [[nodiscard]] std::size_t size() const noexcept;

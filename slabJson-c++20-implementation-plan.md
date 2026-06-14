@@ -181,6 +181,14 @@ public:
     std::optional<Value> find(std::string_view key) const;
     bool contains(std::string_view key) const;
 
+    Result<std::string_view> get_string(std::string_view key) const;
+    Result<bool> get_bool(std::string_view key) const;
+    Result<int64_t> get_int64(std::string_view key) const;
+    Result<uint64_t> get_uint64(std::string_view key) const;
+    Result<double> get_number(std::string_view key) const;
+    Result<Object> get_object(std::string_view key) const;
+    Result<Array> get_array(std::string_view key) const;
+
     Result<void> remove(std::string_view key);
 
     size_t size() const;
@@ -189,6 +197,12 @@ public:
 ```
 
 For duplicate keys, choose one behavior and document it. For the initial implementation, allow duplicate keys internally but make `find()` return the first matching key. Later, an option can be added to replace existing keys.
+
+The typed `get_*()` accessors also use the first matching key. They return
+`InvalidHandle` for a stale object, `NotFound` for an absent key, and
+`TypeMismatch` when the value has the wrong type. `get_int64()` and
+`get_uint64()` require the matching exact integer kind. `get_number()` converts
+any numeric kind to `double` and may round large exact integers.
 
 ### Array API
 
@@ -918,22 +932,37 @@ Implement before compatibility helpers:
 Tests should prove exact integer round trips, iterator behavior, UTF-8
 invariants, targeted errors, and parser stack bounds.
 
-### Milestone 5: cJSON migration helpers
+### Milestone 5: Native convenience accessors
 
-Add convenience helpers that make cJSON migration easier.
+Add typed object-member accessors that are useful independently of cJSON:
 
-Do not implement this until the native API is solid.
+* `get_string()`
+* `get_bool()`
+* `get_int64()`
+* `get_uint64()`
+* `get_number()`
+* `get_object()`
+* `get_array()`
 
-Possible helpers:
+Return `Result<T>` so invalid handles, missing keys, and type mismatches remain
+distinguishable. Preserve exact integer-kind semantics and first-match behavior
+for duplicate keys.
+
+Do not add `operator[]`; its missing-key and wrong-container behavior would be
+ambiguous. Do not add `get_int()` because its width and signedness are
+ambiguous.
+
+### Milestone 6: Optional cJSON compatibility layer
+
+Add opt-in cJSON migration helpers in:
 
 ```cpp
-value["key"]
-object.get_string("key")
-object.get_int("key")
-object.get_bool("key")
+#include <slabjson/cjson_compat.hpp>
 ```
 
-Also consider a separate `cjson_compat.hpp`.
+Keep cJSON naming and lifecycle adaptations out of the native API and the
+default `slabjson.hpp` umbrella header. Require explicit slab and output-buffer
+arguments where cJSON would otherwise allocate.
 
 ## Example target API
 
