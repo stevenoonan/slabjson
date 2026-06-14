@@ -1,0 +1,15 @@
+add_executable(test_slab test_slab.cpp)
+target_link_libraries(test_slab PRIVATE slabjson)
+add_test(NAME slabjson.slab COMMAND test_slab)
+
+add_executable(test_value test_value.cpp)
+target_link_libraries(test_value PRIVATE slabjson)
+add_test(NAME slabjson.value COMMAND test_value)
+
+add_executable(test_object test_object.cpp)
+target_link_libraries(test_object PRIVATE slabjson)
+add_test(NAME slabjson.object COMMAND test_object)
+
+add_executable(test_array test_array.cpp)
+target_link_libraries(test_array PRIVATE slabjson)
+add_test(NAME slabjson.array COMMAND test_array)
