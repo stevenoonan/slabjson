@@ -102,6 +102,27 @@ Duplication:
 
 A shallow object or array duplicate contains no children.
 
+### Duplication optimization follow-up
+
+The recursive duplication path was optimized without changing its public API
+or transactional rollback behavior:
+
+* Slab-owned strings and keys use a private trusted copy path, avoiding
+  redundant UTF-8 validation.
+* The source root is validated once; internal traversal uses node IDs and
+  trusted node pointers.
+* Node allocation returns both the new node ID and pointer, avoiding an
+  immediate lookup.
+* Number kind and payload storage are copied directly before string references
+  are replaced.
+* Parent, child, and sibling links are updated using pointers already known by
+  the iterative traversal.
+
+Focused tests verify that duplicated UTF-8 strings, embedded NULs, and object
+keys remain exact. In a seven-repetition Release benchmark on the development
+machine, these changes reduced SlabJson recursive duplication CPU time by
+approximately 43-50% across all generated corpus profiles.
+
 ## Detach and delete
 
 The layer provides:

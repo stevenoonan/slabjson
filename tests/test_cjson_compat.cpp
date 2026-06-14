@@ -223,6 +223,42 @@ int main()
     }
 
     {
+        const char key_bytes[] = {
+            'k',
+            '\0',
+            static_cast<char>(0xc3),
+            static_cast<char>(0xa9),
+        };
+        const char value_bytes[] = {
+            static_cast<char>(0xe2),
+            static_cast<char>(0x82),
+            static_cast<char>(0xac),
+            '\0',
+            'x',
+        };
+        const std::string_view key{key_bytes, sizeof(key_bytes)};
+        const std::string_view value{value_bytes, sizeof(value_bytes)};
+
+        slabjson::StaticSlab<4096> source_slab;
+        auto source = cjson::create_object(source_slab);
+        auto string = cjson::create_string(source_slab, value);
+        CHECK(source);
+        CHECK(string);
+        CHECK(cjson::add_item_to_object(
+            source.value(),
+            key,
+            string.value()));
+
+        slabjson::StaticSlab<4096> copy_slab;
+        auto copy = cjson::duplicate(copy_slab, source.value());
+        CHECK(copy);
+        auto copied_string =
+            cjson::get_object_item_case_sensitive(copy.value(), key);
+        CHECK(copied_string);
+        CHECK(copied_string->as_string() == value);
+    }
+
+    {
         slabjson::StaticSlab<32768> source_slab;
         auto root_result = cjson::create_array(source_slab);
         CHECK(root_result);

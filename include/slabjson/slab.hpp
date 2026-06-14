@@ -106,10 +106,19 @@ private:
         NodeId node_count;
     };
 
+    struct NodeAllocation {
+        NodeId id;
+        Node* node;
+    };
+
     [[nodiscard]] Result<NodeId> allocate_node(ValueType type) noexcept;
+    [[nodiscard]] Result<NodeAllocation> allocate_node_with_pointer(
+        ValueType type) noexcept;
     [[nodiscard]] Result<StringRef> allocate_string(
         std::size_t length) noexcept;
     [[nodiscard]] Result<StringRef> store_string(std::string_view value) noexcept;
+    [[nodiscard]] Result<StringRef> copy_string_trusted(
+        std::string_view value) noexcept;
     [[nodiscard]] bool can_allocate_node() const noexcept;
     [[nodiscard]] Result<void> validate_attachment(
         NodeId parent_id,
@@ -121,6 +130,8 @@ private:
     void rollback(Checkpoint checkpoint) noexcept;
     [[nodiscard]] const Node* node_for(NodeId id, std::uint32_t generation) const noexcept;
     [[nodiscard]] Node* node_for(NodeId id, std::uint32_t generation) noexcept;
+    [[nodiscard]] const Node* node_at_unchecked(NodeId id) const noexcept;
+    [[nodiscard]] Node* node_at_unchecked(NodeId id) noexcept;
     [[nodiscard]] std::string_view view_string(StringRef ref) const noexcept;
     [[nodiscard]] Value make_value(NodeId id) noexcept;
     [[nodiscard]] Object make_object_handle(NodeId id) noexcept;

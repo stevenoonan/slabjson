@@ -174,55 +174,67 @@ public:
         Value source,
         bool recurse) noexcept
     {
-        if (!source.valid()) {
+        if (source.slab_ == nullptr) {
             return Error{ErrorCode::InvalidHandle, 0};
         }
         if (!destination.valid()) {
             return Error{ErrorCode::InvalidArgument, 0};
         }
 
+        const Slab* source_slab = source.slab_;
+        const Slab::Node* source_root =
+            source_slab->node_for(source.id_, source.generation_);
+        if (source_root == nullptr
+            || source_root->type == ValueType::Invalid) {
+            return Error{ErrorCode::InvalidHandle, 0};
+        }
+
         const Slab::Checkpoint checkpoint = destination.checkpoint();
-        auto root_result = clone_node(destination, source, false);
+        auto root_result =
+            clone_node(destination, *source_slab, *source_root, false);
         if (!root_result) {
             destination.rollback(checkpoint);
             return root_result.error();
         }
-        const Value root = root_result.value();
+        const Slab::NodeAllocation root_allocation = root_result.value();
+        const Value root = destination.make_value(root_allocation.id);
 
         if (!recurse
-            || (source.type() != ValueType::Array
-                && source.type() != ValueType::Object)) {
+            || (source_root->type != ValueType::Array
+                && source_root->type != ValueType::Object)) {
             return root;
         }
 
         Slab::NodeId source_id = source.id_;
-        Slab::NodeId destination_id = root.id_;
+        const Slab::Node* source_node = source_root;
+        Slab::NodeId destination_id = root_allocation.id;
+        Slab::Node* destination_node = root_allocation.node;
         while (true) {
-            const Slab::Node* source_node =
-                source.slab_->node_for(source_id, source.generation_);
-            if (source_node == nullptr) {
-                destination.rollback(checkpoint);
-                return Error{ErrorCode::InternalError, 0};
-            }
-
             if (source_node->first_child != Slab::kInvalidNodeId) {
+                const Slab::NodeId child_source_id =
+                    source_node->first_child;
+                const Slab::Node* child_source =
+                    source_slab->node_at_unchecked(child_source_id);
                 auto child_result = clone_node(
                     destination,
-                    Value{
-                        source.slab_,
-                        source_node->first_child,
-                        source.generation_,
-                    },
+                    *source_slab,
+                    *child_source,
                     source_node->type == ValueType::Object);
                 if (!child_result) {
                     destination.rollback(checkpoint);
                     return child_result.error();
                 }
-                destination.append_child_unchecked(
+                const Slab::NodeAllocation child =
+                    child_result.value();
+                link_first_child(
+                    *destination_node,
                     destination_id,
-                    child_result.value().id_);
-                source_id = source_node->first_child;
-                destination_id = child_result.value().id_;
+                    *child.node,
+                    child.id);
+                source_id = child_source_id;
+                source_node = child_source;
+                destination_id = child.id;
+                destination_node = child.node;
                 continue;
             }
 
@@ -231,130 +243,126 @@ public:
                     return root;
                 }
 
-                source_node =
-                    source.slab_->node_for(source_id, source.generation_);
-                Slab::Node* destination_node =
-                    destination.node_for(
-                        destination_id,
-                        destination.generation_);
-                if (source_node == nullptr
-                    || destination_node == nullptr
-                    || source_node->parent == Slab::kInvalidNodeId
-                    || destination_node->parent == Slab::kInvalidNodeId) {
+                if (source_node->parent == Slab::kInvalidNodeId
+                    || destination_node->parent
+                        == Slab::kInvalidNodeId) {
                     destination.rollback(checkpoint);
                     return Error{ErrorCode::InternalError, 0};
                 }
 
                 if (source_node->next_sibling != Slab::kInvalidNodeId) {
+                    const Slab::NodeId sibling_source_id =
+                        source_node->next_sibling;
                     const Slab::Node* source_parent =
-                        source.slab_->node_for(
-                            source_node->parent,
-                            source.generation_);
-                    if (source_parent == nullptr) {
-                        destination.rollback(checkpoint);
-                        return Error{ErrorCode::InternalError, 0};
-                    }
+                        source_slab->node_at_unchecked(
+                            source_node->parent);
+                    const Slab::Node* sibling_source =
+                        source_slab->node_at_unchecked(
+                            sibling_source_id);
                     auto sibling_result = clone_node(
                         destination,
-                        Value{
-                            source.slab_,
-                            source_node->next_sibling,
-                            source.generation_,
-                        },
+                        *source_slab,
+                        *sibling_source,
                         source_parent->type == ValueType::Object);
                     if (!sibling_result) {
                         destination.rollback(checkpoint);
                         return sibling_result.error();
                     }
-                    destination.append_child_unchecked(
-                        destination_node->parent,
-                        sibling_result.value().id_);
-                    source_id = source_node->next_sibling;
-                    destination_id = sibling_result.value().id_;
+                    const Slab::NodeAllocation sibling =
+                        sibling_result.value();
+                    const Slab::NodeId destination_parent_id =
+                        destination_node->parent;
+                    Slab::Node* destination_parent =
+                        destination.node_at_unchecked(
+                            destination_parent_id);
+                    link_next_sibling(
+                        *destination_node,
+                        *destination_parent,
+                        destination_parent_id,
+                        *sibling.node,
+                        sibling.id);
+                    source_id = sibling_source_id;
+                    source_node = sibling_source;
+                    destination_id = sibling.id;
+                    destination_node = sibling.node;
                     break;
                 }
 
                 source_id = source_node->parent;
+                source_node =
+                    source_slab->node_at_unchecked(source_id);
                 destination_id = destination_node->parent;
+                destination_node =
+                    destination.node_at_unchecked(destination_id);
             }
         }
     }
 
 private:
-    [[nodiscard]] static Result<Value> clone_node(
+    static void link_first_child(
+        Slab::Node& parent,
+        Slab::NodeId parent_id,
+        Slab::Node& child,
+        Slab::NodeId child_id) noexcept
+    {
+        parent.first_child = child_id;
+        parent.last_child = child_id;
+        child.parent = parent_id;
+    }
+
+    static void link_next_sibling(
+        Slab::Node& previous,
+        Slab::Node& parent,
+        Slab::NodeId parent_id,
+        Slab::Node& sibling,
+        Slab::NodeId sibling_id) noexcept
+    {
+        previous.next_sibling = sibling_id;
+        parent.last_child = sibling_id;
+        sibling.parent = parent_id;
+    }
+
+    [[nodiscard]] static Result<Slab::NodeAllocation> clone_node(
         Slab& destination,
-        Value source,
+        const Slab& source_slab,
+        const Slab::Node& source,
         bool copy_key) noexcept
     {
-        const Slab::Node* source_node =
-            source.slab_ == nullptr
-                ? nullptr
-                : source.slab_->node_for(
-                    source.id_,
-                    source.generation_);
-        if (source_node == nullptr) {
+        if (source.type == ValueType::Invalid) {
             return Error{ErrorCode::InvalidHandle, 0};
         }
 
-        auto id_result = destination.allocate_node(source_node->type);
-        if (!id_result) {
-            return id_result.error();
+        auto allocation_result =
+            destination.allocate_node_with_pointer(source.type);
+        if (!allocation_result) {
+            return allocation_result.error();
         }
-        const Slab::NodeId id = id_result.value();
-        Slab::Node* node =
-            destination.node_for(id, destination.generation_);
-        if (node == nullptr) {
-            return Error{ErrorCode::InternalError, 0};
-        }
+        const Slab::NodeAllocation allocation =
+            allocation_result.value();
+        Slab::Node* node = allocation.node;
 
-        switch (source_node->type) {
-        case ValueType::Invalid:
-            return Error{ErrorCode::InvalidHandle, 0};
-        case ValueType::Null:
-        case ValueType::Array:
-        case ValueType::Object:
-            break;
-        case ValueType::Bool:
-            node->payload.bool_value = source_node->payload.bool_value;
-            break;
-        case ValueType::Number:
-            node->number_kind = source_node->number_kind;
-            switch (source_node->number_kind) {
-            case NumberKind::SignedInteger:
-                node->payload.signed_integer =
-                    source_node->payload.signed_integer;
-                break;
-            case NumberKind::UnsignedInteger:
-                node->payload.unsigned_integer =
-                    source_node->payload.unsigned_integer;
-                break;
-            case NumberKind::FloatingPoint:
-                node->payload.floating_point =
-                    source_node->payload.floating_point;
-                break;
-            }
-            break;
-        case ValueType::String: {
-            auto string_result = destination.store_string(
-                source.slab_->view_string(
-                    source_node->payload.string_value));
+        node->number_kind = source.number_kind;
+        node->payload = source.payload;
+
+        if (source.type == ValueType::String) {
+            auto string_result = destination.copy_string_trusted(
+                source_slab.view_string(
+                    source.payload.string_value));
             if (!string_result) {
                 return string_result.error();
             }
             node->payload.string_value = string_result.value();
-            break;
-        }
         }
 
         if (copy_key) {
-            auto key_result = destination.store_string(
-                source.slab_->view_string(source_node->key));
+            auto key_result = destination.copy_string_trusted(
+                source_slab.view_string(source.key));
             if (!key_result) {
                 return key_result.error();
             }
             node->key = key_result.value();
         }
-        return destination.make_value(id);
+        return allocation;
     }
 };
 

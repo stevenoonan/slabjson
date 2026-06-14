@@ -202,6 +202,16 @@ Result<Array> Slab::make_array() noexcept
 
 Result<Slab::NodeId> Slab::allocate_node(ValueType type) noexcept
 {
+    auto allocation = allocate_node_with_pointer(type);
+    if (!allocation) {
+        return allocation.error();
+    }
+    return allocation.value().id;
+}
+
+Result<Slab::NodeAllocation> Slab::allocate_node_with_pointer(
+    ValueType type) noexcept
+{
     if (!valid_) {
         return Error{ErrorCode::InvalidArgument, 0};
     }
@@ -217,7 +227,7 @@ Result<Slab::NodeId> Slab::allocate_node(ValueType type) noexcept
     auto* node = ::new (static_cast<void*>(location)) Node{};
     node->type = type;
     ++node_count_;
-    return id;
+    return NodeAllocation{id, node};
 }
 
 Result<Slab::StringRef> Slab::store_string(std::string_view value) noexcept
@@ -226,6 +236,12 @@ Result<Slab::StringRef> Slab::store_string(std::string_view value) noexcept
         return Error{ErrorCode::InvalidUtf8, *invalid};
     }
 
+    return copy_string_trusted(value);
+}
+
+Result<Slab::StringRef> Slab::copy_string_trusted(
+    std::string_view value) noexcept
+{
     auto allocation = allocate_string(value.size());
     if (!allocation) {
         return allocation.error();
@@ -359,6 +375,19 @@ Slab::Node* Slab::node_for(NodeId id, std::uint32_t generation) noexcept
 {
     return const_cast<Node*>(
         static_cast<const Slab*>(this)->node_for(id, generation));
+}
+
+const Slab::Node* Slab::node_at_unchecked(NodeId id) const noexcept
+{
+    const auto* location =
+        storage_.data() + static_cast<std::size_t>(id) * sizeof(Node);
+    return reinterpret_cast<const Node*>(location);
+}
+
+Slab::Node* Slab::node_at_unchecked(NodeId id) noexcept
+{
+    return const_cast<Node*>(
+        static_cast<const Slab*>(this)->node_at_unchecked(id));
 }
 
 std::string_view Slab::view_string(StringRef ref) const noexcept
