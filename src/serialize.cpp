@@ -73,10 +73,15 @@ private:
 
 class Serializer {
 public:
-    explicit Serializer(Value value) noexcept
+    explicit Serializer(
+        Value value,
+        bool pretty = false,
+        std::uint8_t indent_spaces = 2) noexcept
         : slab_(value.slab_)
         , root_id_(value.id_)
         , generation_(value.generation_)
+        , pretty_(pretty)
+        , indent_spaces_(indent_spaces)
     {
     }
 
@@ -108,6 +113,7 @@ private:
         }
 
         NodeId current_id = root_id_;
+        std::size_t depth = 0;
         while (true) {
             const Slab::Node* current =
                 slab_->node_for(current_id, generation_);
@@ -159,6 +165,15 @@ private:
                     if (child == nullptr || child->parent != current_id) {
                         return Error{ErrorCode::InternalError, 0};
                     }
+                    if (pretty_) {
+                        if (!writer.append('\n')
+                            || !write_indent(writer, depth + 1)) {
+                            return Error{
+                                ErrorCode::OutputCapacityExceeded,
+                                0,
+                            };
+                        }
+                    }
                     if (is_object) {
                         auto prefix_result =
                             write_member_prefix(writer, *child);
@@ -167,6 +182,7 @@ private:
                         }
                     }
                     current_id = current->first_child;
+                    ++depth;
                     continue;
                 }
 
@@ -206,6 +222,15 @@ private:
                     if (!writer.append(',')) {
                         return Error{ErrorCode::OutputCapacityExceeded, 0};
                     }
+                    if (pretty_) {
+                        if (!writer.append('\n')
+                            || !write_indent(writer, depth)) {
+                            return Error{
+                                ErrorCode::OutputCapacityExceeded,
+                                0,
+                            };
+                        }
+                    }
                     if (parent->type == ValueType::Object) {
                         auto prefix_result =
                             write_member_prefix(writer, *sibling);
@@ -217,11 +242,24 @@ private:
                     break;
                 }
 
+                if (pretty_) {
+                    if (depth == 0
+                        || !writer.append('\n')
+                        || !write_indent(writer, depth - 1)) {
+                        return Error{
+                            depth == 0
+                                ? ErrorCode::InternalError
+                                : ErrorCode::OutputCapacityExceeded,
+                            0,
+                        };
+                    }
+                }
                 if (!writer.append(
                         parent->type == ValueType::Object ? '}' : ']')) {
                     return Error{ErrorCode::OutputCapacityExceeded, 0};
                 }
                 current_id = parent_id;
+                --depth;
             }
         }
     }
@@ -356,7 +394,29 @@ private:
         if (!writer.append(':')) {
             return Error{ErrorCode::OutputCapacityExceeded, 0};
         }
+        if (pretty_ && !writer.append(' ')) {
+            return Error{ErrorCode::OutputCapacityExceeded, 0};
+        }
         return {};
+    }
+
+    [[nodiscard]] bool write_indent(
+        Writer& writer,
+        std::size_t depth) const noexcept
+    {
+        if (indent_spaces_ != 0
+            && depth > std::numeric_limits<std::size_t>::max()
+                    / indent_spaces_) {
+            return false;
+        }
+        const std::size_t count =
+            depth * static_cast<std::size_t>(indent_spaces_);
+        for (std::size_t index = 0; index < count; ++index) {
+            if (!writer.append(' ')) {
+                return false;
+            }
+        }
+        return true;
     }
 
     [[nodiscard]] bool overlaps_slab(std::span<char> output) const noexcept
@@ -378,6 +438,8 @@ private:
     Slab* slab_;
     NodeId root_id_;
     std::uint32_t generation_;
+    bool pretty_;
+    std::uint8_t indent_spaces_;
 };
 
 } // namespace detail
@@ -387,9 +449,32 @@ Result<std::size_t> serialized_size(Value value) noexcept
     return detail::Serializer{value}.measure();
 }
 
+Result<std::size_t> serialized_size_pretty(
+    Value value,
+    std::uint8_t indent_spaces) noexcept
+{
+    return detail::Serializer{value, true, indent_spaces}.measure();
+}
+
 Result<std::size_t> serialize(Value value, std::span<char> output) noexcept
 {
     detail::Serializer serializer{value};
+    auto size_result = serializer.measure();
+    if (!size_result) {
+        return size_result.error();
+    }
+    if (size_result.value() > output.size()) {
+        return Error{ErrorCode::OutputCapacityExceeded, 0};
+    }
+    return serializer.write_to(output);
+}
+
+Result<std::size_t> serialize_pretty(
+    Value value,
+    std::span<char> output,
+    std::uint8_t indent_spaces) noexcept
+{
+    detail::Serializer serializer{value, true, indent_spaces};
     auto size_result = serializer.measure();
     if (!size_result) {
         return size_result.error();

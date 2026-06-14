@@ -25,3 +25,7 @@ add_test(NAME slabjson.parse COMMAND test_parse)
 add_executable(test_hardening test_hardening.cpp)
 target_link_libraries(test_hardening PRIVATE slabjson)
 add_test(NAME slabjson.hardening COMMAND test_hardening)
+
+add_executable(test_cjson_compat test_cjson_compat.cpp)
+target_link_libraries(test_cjson_compat PRIVATE slabjson)
+add_test(NAME slabjson.cjson_compat COMMAND test_cjson_compat)

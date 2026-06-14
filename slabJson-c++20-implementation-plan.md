@@ -626,6 +626,48 @@ Then add a compatibility header:
 
 The compatibility layer should map common cJSON-style operations to SlabJson operations.
 
+The compatibility API lives in `slabjson::cjson` and uses `Value` as its
+uniform `Item` handle:
+
+```cpp
+namespace slabjson::cjson {
+
+using Item = Value;
+
+Result<Item> create_object(Slab& slab);
+Result<Item> create_array(Slab& slab);
+Result<Item> create_string(Slab& slab, std::string_view value);
+Result<Item> create_number(Slab& slab, double value);
+
+Result<void> add_item_to_object(
+    Item object,
+    std::string_view key,
+    Item item);
+Result<void> add_item_to_array(Item array, Item item);
+
+std::optional<Item> get_object_item(
+    Item object,
+    std::string_view key);
+std::optional<Item> get_array_item(Item array, size_t index);
+
+Result<size_t> print_preallocated(
+    Item item,
+    std::span<char> output,
+    bool formatted);
+
+Result<Item> duplicate(
+    Slab& destination,
+    Item item,
+    bool recurse = true);
+
+} // namespace slabjson::cjson
+```
+
+Compatibility object lookup follows cJSON's ASCII case-insensitive default and
+also provides an explicit case-sensitive variant. Printing requires room for a
+trailing NUL, writes it on success, and returns the JSON byte count excluding
+that terminator.
+
 Target cJSON-like functionality to cover eventually:
 
 * Create object
@@ -653,6 +695,10 @@ Important difference:
 
 Compatibility layer can provide helper functions that mimic cJSON behavior only if the user explicitly supplies a slab/output buffer.
 
+The layer is source-migration support, not an ABI clone. It does not provide a
+public mutable node structure, allocator hooks, raw child/next pointers,
+reference nodes, raw JSON nodes, or heap-allocated print results.
+
 ## Header and source layout
 
 Use this initial structure:
@@ -669,6 +715,7 @@ include/
     error.hpp
     parse.hpp
     serialize.hpp
+    cjson_compat.hpp
     slabjson.hpp
 
 src/
@@ -678,6 +725,7 @@ src/
   array.cpp
   parse.cpp
   serialize.cpp
+  cjson_compat.cpp
 
 tests/
   test_slab.cpp
@@ -963,6 +1011,27 @@ Add opt-in cJSON migration helpers in:
 Keep cJSON naming and lifecycle adaptations out of the native API and the
 default `slabjson.hpp` umbrella header. Require explicit slab and output-buffer
 arguments where cJSON would otherwise allocate.
+
+Implement:
+
+* Uniform `cjson::Item` handles
+* Primitive, object, and array creation
+* Object and array attachment
+* cJSON-style object and array lookup
+* Type predicates and string/number extraction
+* Parsing into an explicit slab
+* Compact and pretty preallocated printing with NUL termination
+* Recursive or shallow duplication into an explicit destination slab
+* Object and array detach/delete operations
+* Slab-wide delete/reset lifecycle
+
+Duplication and printing must be transactional on capacity failure. Recursive
+duplication and pretty serialization must use the slab's parent/sibling links
+rather than call-stack recursion.
+
+Logical delete and detach do not reclaim slab memory. `delete_all()` maps the
+cJSON tree-deletion lifecycle to `Slab::reset()` and invalidates every handle
+owned by that slab.
 
 ## Example target API
 

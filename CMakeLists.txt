@@ -7,6 +7,7 @@ option(SLABJSON_ENABLE_EXCEPTIONS "Allow exceptions" OFF)
 
 add_library(slabjson
     src/array.cpp
+    src/cjson_compat.cpp
     src/object.cpp
     src/parse.cpp
     src/serialize.cpp

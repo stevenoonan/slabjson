@@ -118,6 +118,54 @@ int main()
             "\"metadata\":{\"version\":2,\"flags\":[false]}}");
 
         CHECK_SERIALIZES(tags, "[\"hub\",\"production\"]");
+
+        auto pretty_size = slabjson::serialized_size_pretty(root, 2);
+        CHECK(pretty_size);
+        std::array<char, 512> pretty_output{};
+        auto pretty_result =
+            slabjson::serialize_pretty(root, pretty_output, 2);
+        CHECK(pretty_result);
+        CHECK(pretty_result.value() == pretty_size.value());
+        CHECK((std::string_view{
+            pretty_output.data(),
+            pretty_result.value(),
+        } == "{\n"
+             "  \"device_id\": \"hub-123\",\n"
+             "  \"battery_mv\": 4120,\n"
+             "  \"connected\": true,\n"
+             "  \"fault\": null,\n"
+             "  \"tags\": [\n"
+             "    \"hub\",\n"
+             "    \"production\"\n"
+             "  ],\n"
+             "  \"metadata\": {\n"
+             "    \"version\": 2,\n"
+             "    \"flags\": [\n"
+             "      false\n"
+             "    ]\n"
+             "  }\n"
+             "}"));
+
+        std::array<char, 512> zero_indent_output{};
+        auto zero_indent =
+            slabjson::serialize_pretty(root, zero_indent_output, 0);
+        CHECK(zero_indent);
+        CHECK((std::string_view{
+            zero_indent_output.data(),
+            zero_indent.value(),
+        }.starts_with("{\n\"device_id\": \"hub-123\"")));
+
+        std::array<char, 8> pretty_small;
+        pretty_small.fill('#');
+        auto pretty_small_result =
+            slabjson::serialize_pretty(root, pretty_small, 2);
+        CHECK(!pretty_small_result);
+        CHECK(
+            pretty_small_result.error().code
+            == slabjson::ErrorCode::OutputCapacityExceeded);
+        for (char character : pretty_small) {
+            CHECK(character == '#');
+        }
     }
 
     {

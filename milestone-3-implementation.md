@@ -14,7 +14,8 @@ Milestone 3 adds compact JSON serialization:
 * Explicit output-capacity errors
 * Serializer CMake and unit test target
 
-Pretty serialization remains deferred.
+Pretty serialization was added with the optional cJSON compatibility milestone.
+It uses the same stackless traversal and caller-provided output model.
 
 ## Public API
 
@@ -56,6 +57,15 @@ std::string_view json{output.data(), result.value()};
 The returned size excludes a NUL terminator. The serializer does not append one.
 
 `Object` and `Array` work directly because both convert to `Value`.
+
+Pretty output is available through:
+
+```cpp
+auto required = slabjson::serialized_size_pretty(root, 2);
+auto written = slabjson::serialize_pretty(root, output, 2);
+```
+
+The indent width may be zero. Empty containers remain on one line.
 
 ## Output sizing and failure behavior
 

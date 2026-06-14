@@ -7,6 +7,8 @@
 namespace slabjson {
 
 namespace detail {
+class CjsonAccess;
+class CjsonCloner;
 class Parser;
 class Serializer;
 }
@@ -64,6 +66,8 @@ private:
 
     friend class Array;
     friend class ArrayIterator;
+    friend class detail::CjsonAccess;
+    friend class detail::CjsonCloner;
     friend class detail::Parser;
     friend class detail::Serializer;
     friend class Object;
