@@ -11,6 +11,10 @@
 
 namespace slabjson {
 
+namespace detail {
+class Serializer;
+}
+
 class Slab {
 public:
     explicit Slab(std::span<std::byte> storage) noexcept;
@@ -100,6 +104,7 @@ private:
     bool valid_{false};
 
     friend class Array;
+    friend class detail::Serializer;
     friend class Object;
     friend class Value;
 };

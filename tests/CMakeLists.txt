@@ -13,3 +13,7 @@ add_test(NAME slabjson.object COMMAND test_object)
 add_executable(test_array test_array.cpp)
 target_link_libraries(test_array PRIVATE slabjson)
 add_test(NAME slabjson.array COMMAND test_array)
+
+add_executable(test_serialize test_serialize.cpp)
+target_link_libraries(test_serialize PRIVATE slabjson)
+add_test(NAME slabjson.serialize COMMAND test_serialize)
