@@ -9,8 +9,9 @@
 - Added deterministic Python generation of compact and newline-formatted
   Twitter, CITM, and Canada profiles in the build directory.
 - Added `slabjson_bench` with these benchmark families for both libraries:
-  `ParseLifecycle`, `SerializeCompact`, `SerializePretty`,
-  `RoundTripCompact`, and `DuplicateRecursive`.
+  `ParseLifecycle`, `SerializeTransactional`, `SerializePartial`,
+  `RoundTripCompact`, and `DuplicateRecursive`. `SerializedSize` separately
+  measures SlabJson's non-writing preflight traversal.
 - Added setup-time validation requiring full input consumption, successful
   reparsing of serialized output, and case-sensitive cJSON semantic equality.
 - Added `slabjson_conformance`, covering all JSONTestSuite cases, generated
@@ -52,7 +53,17 @@ python3 benchmarks/show_timing_report.py
 ```
 
 The delta is relative to cJSON. A negative value means SlabJson is faster; a
-positive value means SlabJson is slower.
+positive value means SlabJson is slower. `SerializedSize` has no cJSON column
+because cJSON does not expose an equivalent non-writing size operation.
+
+The cJSON rows in both serialization families are the same
+`cJSON_PrintPreallocated()` single-pass baseline. The two families distinguish
+SlabJson's transactional and partial-write API contracts.
+
+In the first five-repetition Release report after this split, partial
+serialization was faster than cJSON for all 18 compact and formatted corpus
+profiles, ranging from approximately 21% to 91% faster on the development
+machine. Results remain machine-specific and informational.
 
 Generated corpora and reports remain under the build directory and are not
 committed.

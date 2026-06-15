@@ -45,6 +45,24 @@ void check_serializes(
         std::string_view{output.data(), result.value()} == expected,
         "serialized text",
         line);
+
+    output.fill('\0');
+    auto partial_result = slabjson::serialize_partial(value, output);
+    check(
+        static_cast<bool>(partial_result),
+        "serialize_partial(value, output)",
+        line);
+    if (!partial_result) {
+        return;
+    }
+    check(
+        partial_result.value() == expected.size(),
+        "partial written size",
+        line);
+    check(
+        std::string_view{output.data(), partial_result.value()} == expected,
+        "partial serialized text",
+        line);
 }
 
 #define CHECK_SERIALIZES(value, expected) \
@@ -126,25 +144,39 @@ int main()
             slabjson::serialize_pretty(root, pretty_output, 2);
         CHECK(pretty_result);
         CHECK(pretty_result.value() == pretty_size.value());
+        const std::string_view expected_pretty =
+            "{\n"
+            "  \"device_id\": \"hub-123\",\n"
+            "  \"battery_mv\": 4120,\n"
+            "  \"connected\": true,\n"
+            "  \"fault\": null,\n"
+            "  \"tags\": [\n"
+            "    \"hub\",\n"
+            "    \"production\"\n"
+            "  ],\n"
+            "  \"metadata\": {\n"
+            "    \"version\": 2,\n"
+            "    \"flags\": [\n"
+            "      false\n"
+            "    ]\n"
+            "  }\n"
+            "}";
         CHECK((std::string_view{
             pretty_output.data(),
             pretty_result.value(),
-        } == "{\n"
-             "  \"device_id\": \"hub-123\",\n"
-             "  \"battery_mv\": 4120,\n"
-             "  \"connected\": true,\n"
-             "  \"fault\": null,\n"
-             "  \"tags\": [\n"
-             "    \"hub\",\n"
-             "    \"production\"\n"
-             "  ],\n"
-             "  \"metadata\": {\n"
-             "    \"version\": 2,\n"
-             "    \"flags\": [\n"
-             "      false\n"
-             "    ]\n"
-             "  }\n"
-             "}"));
+        } == expected_pretty));
+
+        std::array<char, 512> pretty_partial_output{};
+        auto pretty_partial = slabjson::serialize_pretty_partial(
+            root,
+            pretty_partial_output,
+            2);
+        CHECK(pretty_partial);
+        CHECK(pretty_partial.value() == expected_pretty.size());
+        CHECK((std::string_view{
+            pretty_partial_output.data(),
+            pretty_partial.value(),
+        } == expected_pretty));
 
         std::array<char, 512> zero_indent_output{};
         auto zero_indent =
@@ -243,10 +275,30 @@ int main()
             CHECK(character == '#');
         }
 
+        std::array<char, 8> partial_output;
+        partial_output.fill('#');
+        auto partial_result = slabjson::serialize_partial(
+            value,
+            std::span<char>{partial_output}.first(size_result.value() - 1));
+        CHECK(!partial_result);
+        CHECK(
+            partial_result.error().code
+            == slabjson::ErrorCode::OutputCapacityExceeded);
+        CHECK((std::string_view{partial_output.data(), 6} == "\"exact"));
+        CHECK(partial_output[6] == '#');
+        CHECK(partial_output[7] == '#');
+
         auto empty_result = slabjson::serialize(value, std::span<char>{});
         CHECK(!empty_result);
         CHECK(
             empty_result.error().code
+            == slabjson::ErrorCode::OutputCapacityExceeded);
+
+        auto partial_empty =
+            slabjson::serialize_partial(value, std::span<char>{});
+        CHECK(!partial_empty);
+        CHECK(
+            partial_empty.error().code
             == slabjson::ErrorCode::OutputCapacityExceeded);
     }
 
@@ -282,6 +334,13 @@ int main()
         CHECK(!overlap_result);
         CHECK(
             overlap_result.error().code
+            == slabjson::ErrorCode::InvalidArgument);
+
+        auto partial_overlap =
+            slabjson::serialize_partial(object_result.value(), output);
+        CHECK(!partial_overlap);
+        CHECK(
+            partial_overlap.error().code
             == slabjson::ErrorCode::InvalidArgument);
     }
 
@@ -330,6 +389,12 @@ int main()
         auto result = slabjson::serialize(value, output);
         CHECK(!result);
         CHECK(result.error().code == slabjson::ErrorCode::InvalidHandle);
+
+        auto partial_result = slabjson::serialize_partial(value, output);
+        CHECK(!partial_result);
+        CHECK(
+            partial_result.error().code
+            == slabjson::ErrorCode::InvalidHandle);
     }
 
     return failures == 0 ? 0 : 1;

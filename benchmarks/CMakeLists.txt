@@ -171,8 +171,9 @@ add_test(
 
 foreach(family
     ParseLifecycle
-    SerializeCompact
-    SerializePretty
+    SerializedSize
+    SerializeTransactional
+    SerializePartial
     RoundTripCompact
     DuplicateRecursive
 )

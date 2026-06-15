@@ -68,7 +68,35 @@ void cjson_parse_lifecycle(
     set_throughput(state, document.input.size());
 }
 
-void slab_serialize(
+void slab_serialized_size(
+    benchmark::State& state,
+    const sb::CorpusDocument& document,
+    bool pretty)
+{
+    slabjson::StaticSlab<sb::kSlabCapacity> slab;
+    auto parsed = slabjson::parse(slab, document.input);
+    if (!parsed) {
+        state.SkipWithError("SlabJson setup parse failed");
+        return;
+    }
+
+    std::size_t output_bytes = 0;
+    for (auto _ : state) {
+        (void)_;
+        auto result = pretty
+            ? slabjson::serialized_size_pretty(parsed.value())
+            : slabjson::serialized_size(parsed.value());
+        benchmark::DoNotOptimize(result);
+        if (!result) {
+            state.SkipWithError("SlabJson sizing failed");
+            break;
+        }
+        output_bytes = result.value();
+    }
+    set_throughput(state, output_bytes);
+}
+
+void slab_serialize_transactional(
     benchmark::State& state,
     const sb::CorpusDocument& document,
     bool pretty)
@@ -98,6 +126,42 @@ void slab_serialize(
         benchmark::ClobberMemory();
         if (!result) {
             state.SkipWithError("SlabJson serialization failed");
+            break;
+        }
+    }
+    set_throughput(state, size_result.value());
+}
+
+void slab_serialize_partial(
+    benchmark::State& state,
+    const sb::CorpusDocument& document,
+    bool pretty)
+{
+    slabjson::StaticSlab<sb::kSlabCapacity> slab;
+    auto parsed = slabjson::parse(slab, document.input);
+    if (!parsed) {
+        state.SkipWithError("SlabJson setup parse failed");
+        return;
+    }
+
+    const auto size_result = pretty
+        ? slabjson::serialized_size_pretty(parsed.value())
+        : slabjson::serialized_size(parsed.value());
+    if (!size_result) {
+        state.SkipWithError("SlabJson output sizing failed");
+        return;
+    }
+    std::vector<char> output(size_result.value());
+
+    for (auto _ : state) {
+        (void)_;
+        auto result = pretty
+            ? slabjson::serialize_pretty_partial(parsed.value(), output)
+            : slabjson::serialize_partial(parsed.value(), output);
+        benchmark::DoNotOptimize(result);
+        benchmark::ClobberMemory();
+        if (!result) {
+            state.SkipWithError("SlabJson partial serialization failed");
             break;
         }
     }
@@ -332,26 +396,38 @@ int main(int argc, char** argv)
                 cjson_round_trip);
 
             if (document.variant == "compact") {
-                benchmark::RegisterBenchmark(
-                    ("SerializeCompact/SlabJson/" + document.profile).c_str(),
-                    slab_serialize,
-                    std::cref(document),
-                    false);
-                benchmark::RegisterBenchmark(
-                    ("SerializeCompact/cJSON/" + document.profile).c_str(),
-                    cjson_serialize,
-                    std::cref(document),
-                    false);
-                benchmark::RegisterBenchmark(
-                    ("SerializePretty/SlabJson/" + document.profile).c_str(),
-                    slab_serialize,
-                    std::cref(document),
-                    true);
-                benchmark::RegisterBenchmark(
-                    ("SerializePretty/cJSON/" + document.profile).c_str(),
-                    cjson_serialize,
-                    std::cref(document),
-                    true);
+                for (const bool pretty : {false, true}) {
+                    const std::string style =
+                        pretty ? "pretty" : "compact";
+                    const std::string suffix =
+                        document.profile + "/" + style;
+
+                    benchmark::RegisterBenchmark(
+                        ("SerializedSize/SlabJson/" + suffix).c_str(),
+                        slab_serialized_size,
+                        std::cref(document),
+                        pretty);
+                    benchmark::RegisterBenchmark(
+                        ("SerializeTransactional/SlabJson/" + suffix).c_str(),
+                        slab_serialize_transactional,
+                        std::cref(document),
+                        pretty);
+                    benchmark::RegisterBenchmark(
+                        ("SerializeTransactional/cJSON/" + suffix).c_str(),
+                        cjson_serialize,
+                        std::cref(document),
+                        pretty);
+                    benchmark::RegisterBenchmark(
+                        ("SerializePartial/SlabJson/" + suffix).c_str(),
+                        slab_serialize_partial,
+                        std::cref(document),
+                        pretty);
+                    benchmark::RegisterBenchmark(
+                        ("SerializePartial/cJSON/" + suffix).c_str(),
+                        cjson_serialize,
+                        std::cref(document),
+                        pretty);
+                }
                 register_pair(
                     "DuplicateRecursive",
                     document,

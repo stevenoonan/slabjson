@@ -118,6 +118,27 @@ struct Options {
                << '\t'
                << (unchanged ? "unchanged" : "modified")
                << '\n';
+
+        output.assign(size_result.value() - 1, '#');
+        const auto partial_result = pretty
+            ? slabjson::serialize_pretty_partial(parsed.value(), output)
+            : slabjson::serialize_partial(parsed.value(), output);
+        const bool partial_modified = !all_equal(output, '#');
+        const bool partial_capacity_failure =
+            !partial_result
+            && partial_result.error().code
+                == slabjson::ErrorCode::OutputCapacityExceeded;
+        success = success
+            && partial_modified
+            && partial_capacity_failure;
+        report << (pretty ? "pretty" : "compact")
+               << "_partial_undersized_output\t"
+               << (partial_capacity_failure
+                       ? "capacity_error"
+                       : "wrong_result")
+               << '\t'
+               << (partial_modified ? "modified" : "unchanged")
+               << '\n';
     }
 
     auto cjson_value = sb::parse_cjson_full(document.input);

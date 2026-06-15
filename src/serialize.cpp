@@ -3,6 +3,7 @@
 #include <charconv>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <span>
 #include <string_view>
@@ -13,29 +14,13 @@
 namespace slabjson {
 namespace detail {
 
-class Writer {
+class CountingWriter {
 public:
-    explicit Writer(std::span<char> output) noexcept
-        : output_(output)
-        , count_only_(false)
-    {
-    }
-
-    Writer() noexcept
-        : count_only_(true)
-    {
-    }
-
     [[nodiscard]] bool append(char character) noexcept
     {
+        (void)character;
         if (position_ == std::numeric_limits<std::size_t>::max()) {
             return false;
-        }
-        if (!count_only_) {
-            if (position_ >= output_.size()) {
-                return false;
-            }
-            output_[position_] = character;
         }
         ++position_;
         return true;
@@ -46,16 +31,69 @@ public:
         if (text.size() > std::numeric_limits<std::size_t>::max() - position_) {
             return false;
         }
-        if (!count_only_ && text.size() > output_.size() - position_) {
+        position_ += text.size();
+        return true;
+    }
+
+    [[nodiscard]] bool append_repeated(
+        char character,
+        std::size_t count) noexcept
+    {
+        (void)character;
+        if (count > std::numeric_limits<std::size_t>::max() - position_) {
             return false;
         }
+        position_ += count;
+        return true;
+    }
 
-        if (!count_only_) {
-            for (char character : text) {
-                output_[position_++] = character;
-            }
-        } else {
+    [[nodiscard]] std::size_t size() const noexcept
+    {
+        return position_;
+    }
+
+private:
+    std::size_t position_{0};
+};
+
+class CheckedWriter {
+public:
+    explicit CheckedWriter(std::span<char> output) noexcept
+        : output_(output)
+    {
+    }
+
+    [[nodiscard]] bool append(char character) noexcept
+    {
+        if (position_ >= output_.size()) {
+            return false;
+        }
+        output_[position_++] = character;
+        return true;
+    }
+
+    [[nodiscard]] bool append(std::string_view text) noexcept
+    {
+        if (text.size() > output_.size() - position_) {
+            return false;
+        }
+        if (!text.empty()) {
+            std::memcpy(output_.data() + position_, text.data(), text.size());
             position_ += text.size();
+        }
+        return true;
+    }
+
+    [[nodiscard]] bool append_repeated(
+        char character,
+        std::size_t count) noexcept
+    {
+        if (count > output_.size() - position_) {
+            return false;
+        }
+        if (count != 0) {
+            std::memset(output_.data() + position_, character, count);
+            position_ += count;
         }
         return true;
     }
@@ -68,7 +106,49 @@ public:
 private:
     std::span<char> output_{};
     std::size_t position_{0};
-    bool count_only_;
+};
+
+class UncheckedWriter {
+public:
+    explicit UncheckedWriter(std::span<char> output) noexcept
+        : output_(output.data())
+    {
+    }
+
+    [[nodiscard]] bool append(char character) noexcept
+    {
+        output_[position_++] = character;
+        return true;
+    }
+
+    [[nodiscard]] bool append(std::string_view text) noexcept
+    {
+        if (!text.empty()) {
+            std::memcpy(output_ + position_, text.data(), text.size());
+            position_ += text.size();
+        }
+        return true;
+    }
+
+    [[nodiscard]] bool append_repeated(
+        char character,
+        std::size_t count) noexcept
+    {
+        if (count != 0) {
+            std::memset(output_ + position_, character, count);
+            position_ += count;
+        }
+        return true;
+    }
+
+    [[nodiscard]] std::size_t size() const noexcept
+    {
+        return position_;
+    }
+
+private:
+    char* output_;
+    std::size_t position_{0};
 };
 
 class Serializer {
@@ -87,24 +167,36 @@ public:
 
     [[nodiscard]] Result<std::size_t> measure() const noexcept
     {
-        Writer writer;
-        return write(writer);
+        CountingWriter writer;
+        return write<true>(writer);
     }
 
-    [[nodiscard]] Result<std::size_t> write_to(
+    [[nodiscard]] Result<std::size_t> write_partial_to(
         std::span<char> output) const noexcept
     {
         if (overlaps_slab(output)) {
             return Error{ErrorCode::InvalidArgument, 0};
         }
 
-        Writer writer{output};
-        return write(writer);
+        CheckedWriter writer{output};
+        return write<true>(writer);
+    }
+
+    [[nodiscard]] Result<std::size_t> write_prevalidated_to(
+        std::span<char> output) const noexcept
+    {
+        if (overlaps_slab(output)) {
+            return Error{ErrorCode::InvalidArgument, 0};
+        }
+
+        UncheckedWriter writer{output};
+        return write<false>(writer);
     }
 
 private:
     using NodeId = Slab::NodeId;
 
+    template<bool ValidateUtf8, typename Writer>
     [[nodiscard]] Result<std::size_t> write(Writer& writer) const noexcept
     {
         if (slab_ == nullptr
@@ -145,6 +237,7 @@ private:
             }
             case ValueType::String: {
                 auto string_result = write_string(
+                    ValidateUtf8,
                     writer,
                     slab_->view_string(current->payload.string_value));
                 if (!string_result) {
@@ -176,7 +269,9 @@ private:
                     }
                     if (is_object) {
                         auto prefix_result =
-                            write_member_prefix(writer, *child);
+                            write_member_prefix<ValidateUtf8>(
+                                writer,
+                                *child);
                         if (!prefix_result) {
                             return prefix_result.error();
                         }
@@ -233,7 +328,9 @@ private:
                     }
                     if (parent->type == ValueType::Object) {
                         auto prefix_result =
-                            write_member_prefix(writer, *sibling);
+                            write_member_prefix<ValidateUtf8>(
+                                writer,
+                                *sibling);
                         if (!prefix_result) {
                             return prefix_result.error();
                         }
@@ -264,6 +361,7 @@ private:
         }
     }
 
+    template<typename Writer>
     [[nodiscard]] Result<void> write_number(
         Writer& writer,
         const Slab::Node& node) const noexcept
@@ -307,58 +405,54 @@ private:
         return {};
     }
 
+    template<typename Writer>
     [[nodiscard]] Result<void> write_string(
+        bool validate_utf8,
         Writer& writer,
         std::string_view value) const noexcept
     {
         static constexpr char kHex[] = "0123456789abcdef";
 
-        if (auto invalid = invalid_utf8_offset(value)) {
-            return Error{ErrorCode::InvalidUtf8, *invalid};
+        if (validate_utf8) {
+            if (auto invalid = invalid_utf8_offset(value)) {
+                return Error{ErrorCode::InvalidUtf8, *invalid};
+            }
         }
         if (!writer.append('"')) {
             return Error{ErrorCode::OutputCapacityExceeded, 0};
         }
-        for (unsigned char character : value) {
+
+        std::size_t run_start = 0;
+        for (std::size_t index = 0; index < value.size(); ++index) {
+            const auto character =
+                static_cast<unsigned char>(value[index]);
+            std::string_view escape;
+            char control_escape[6];
             switch (character) {
             case '"':
-                if (!writer.append("\\\"")) {
-                    return Error{ErrorCode::OutputCapacityExceeded, 0};
-                }
+                escape = "\\\"";
                 break;
             case '\\':
-                if (!writer.append("\\\\")) {
-                    return Error{ErrorCode::OutputCapacityExceeded, 0};
-                }
+                escape = "\\\\";
                 break;
             case '\b':
-                if (!writer.append("\\b")) {
-                    return Error{ErrorCode::OutputCapacityExceeded, 0};
-                }
+                escape = "\\b";
                 break;
             case '\f':
-                if (!writer.append("\\f")) {
-                    return Error{ErrorCode::OutputCapacityExceeded, 0};
-                }
+                escape = "\\f";
                 break;
             case '\n':
-                if (!writer.append("\\n")) {
-                    return Error{ErrorCode::OutputCapacityExceeded, 0};
-                }
+                escape = "\\n";
                 break;
             case '\r':
-                if (!writer.append("\\r")) {
-                    return Error{ErrorCode::OutputCapacityExceeded, 0};
-                }
+                escape = "\\r";
                 break;
             case '\t':
-                if (!writer.append("\\t")) {
-                    return Error{ErrorCode::OutputCapacityExceeded, 0};
-                }
+                escape = "\\t";
                 break;
             default:
                 if (character < 0x20) {
-                    const char escape[] = {
+                    const char encoded[] = {
                         '\\',
                         'u',
                         '0',
@@ -366,15 +460,29 @@ private:
                         kHex[(character >> 4) & 0x0f],
                         kHex[character & 0x0f],
                     };
-                    if (!writer.append(
-                            std::string_view{escape, sizeof(escape)})) {
-                        return Error{ErrorCode::OutputCapacityExceeded, 0};
-                    }
-                } else if (!writer.append(static_cast<char>(character))) {
-                    return Error{ErrorCode::OutputCapacityExceeded, 0};
+                    std::memcpy(
+                        control_escape,
+                        encoded,
+                        sizeof(control_escape));
+                    escape = std::string_view{
+                        control_escape,
+                        sizeof(control_escape),
+                    };
                 }
                 break;
             }
+
+            if (escape.empty()) {
+                continue;
+            }
+            if (!writer.append(value.substr(run_start, index - run_start))
+                || !writer.append(escape)) {
+                return Error{ErrorCode::OutputCapacityExceeded, 0};
+            }
+            run_start = index + 1;
+        }
+        if (!writer.append(value.substr(run_start))) {
+            return Error{ErrorCode::OutputCapacityExceeded, 0};
         }
         if (!writer.append('"')) {
             return Error{ErrorCode::OutputCapacityExceeded, 0};
@@ -382,12 +490,15 @@ private:
         return {};
     }
 
+    template<bool ValidateUtf8, typename Writer>
     [[nodiscard]] Result<void> write_member_prefix(
         Writer& writer,
         const Slab::Node& child) const noexcept
     {
-        auto key_result =
-            write_string(writer, slab_->view_string(child.key));
+        auto key_result = write_string(
+            ValidateUtf8,
+            writer,
+            slab_->view_string(child.key));
         if (!key_result) {
             return key_result.error();
         }
@@ -400,6 +511,7 @@ private:
         return {};
     }
 
+    template<typename Writer>
     [[nodiscard]] bool write_indent(
         Writer& writer,
         std::size_t depth) const noexcept
@@ -411,12 +523,7 @@ private:
         }
         const std::size_t count =
             depth * static_cast<std::size_t>(indent_spaces_);
-        for (std::size_t index = 0; index < count; ++index) {
-            if (!writer.append(' ')) {
-                return false;
-            }
-        }
-        return true;
+        return writer.append_repeated(' ', count);
     }
 
     [[nodiscard]] bool overlaps_slab(std::span<char> output) const noexcept
@@ -466,7 +573,14 @@ Result<std::size_t> serialize(Value value, std::span<char> output) noexcept
     if (size_result.value() > output.size()) {
         return Error{ErrorCode::OutputCapacityExceeded, 0};
     }
-    return serializer.write_to(output);
+    return serializer.write_prevalidated_to(output);
+}
+
+Result<std::size_t> serialize_partial(
+    Value value,
+    std::span<char> output) noexcept
+{
+    return detail::Serializer{value}.write_partial_to(output);
 }
 
 Result<std::size_t> serialize_pretty(
@@ -482,7 +596,19 @@ Result<std::size_t> serialize_pretty(
     if (size_result.value() > output.size()) {
         return Error{ErrorCode::OutputCapacityExceeded, 0};
     }
-    return serializer.write_to(output);
+    return serializer.write_prevalidated_to(output);
+}
+
+Result<std::size_t> serialize_pretty_partial(
+    Value value,
+    std::span<char> output,
+    std::uint8_t indent_spaces) noexcept
+{
+    return detail::Serializer{
+        value,
+        true,
+        indent_spaces,
+    }.write_partial_to(output);
 }
 
 } // namespace slabjson

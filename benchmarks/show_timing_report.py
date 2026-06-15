@@ -73,19 +73,16 @@ def load_rows(path):
     result = []
     for test in order:
         values = rows[test]
-        missing = {"SlabJson", "cJSON"} - values.keys()
-        if missing:
-            names = ", ".join(sorted(missing))
-            raise ValueError(f"{test}: missing result for {names}")
-
-        slabjson_ns = values["SlabJson"]
-        cjson_ns = values["cJSON"]
-        delta = ((slabjson_ns - cjson_ns) / cjson_ns) * 100.0
+        slabjson_ns = values.get("SlabJson")
+        cjson_ns = values.get("cJSON")
+        delta = None
+        if slabjson_ns is not None and cjson_ns is not None:
+            delta = ((slabjson_ns - cjson_ns) / cjson_ns) * 100.0
         result.append(
             (
                 test,
-                round(slabjson_ns),
-                round(cjson_ns),
+                None if slabjson_ns is None else round(slabjson_ns),
+                None if cjson_ns is None else round(cjson_ns),
                 delta,
             )
         )
@@ -95,7 +92,12 @@ def load_rows(path):
 def print_rows(rows):
     headers = ("Test", "SlabJson (ns)", "cJSON (ns)", "Delta")
     formatted = [
-        (test, f"{slabjson_ns:d}", f"{cjson_ns:d}", f"{delta:+.1f}%")
+        (
+            test,
+            "-" if slabjson_ns is None else f"{slabjson_ns:d}",
+            "-" if cjson_ns is None else f"{cjson_ns:d}",
+            "-" if delta is None else f"{delta:+.1f}%",
+        )
         for test, slabjson_ns, cjson_ns, delta in rows
     ]
 

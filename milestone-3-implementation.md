@@ -5,6 +5,7 @@
 Milestone 3 adds compact JSON serialization:
 
 * `serialize(Value, std::span<char>)`
+* `serialize_partial(Value, std::span<char>)`
 * `serialized_size(Value)`
 * Primitive serialization
 * Object and array serialization
@@ -80,6 +81,13 @@ auto required = slabjson::serialized_size(root);
 too small, it returns `ErrorCode::OutputCapacityExceeded` and does not modify
 the output buffer.
 
+`serialize_partial()` performs one pass and writes directly to the output
+span. If the span is too small, it returns
+`ErrorCode::OutputCapacityExceeded` and the output may contain a partial JSON
+document. Other errors discovered after writing begins may also leave partial
+output. `serialize_pretty_partial()` provides the same behavior for formatted
+output.
+
 An exactly sized output span succeeds.
 
 Output storage must not overlap the slab's usable storage region. Overlap
@@ -123,6 +131,11 @@ Other bytes below `0x20` are emitted as lowercase `\u00xx` escapes.
 The forward slash is emitted without escaping. Valid non-control UTF-8 bytes are
 copied unchanged. The native API hardening milestone adds validation before
 manual strings enter the slab and a defensive serializer validation pass.
+
+Contiguous unescaped string runs are copied with `memcpy`, and indentation is
+written with `memset`. Transactional serialization uses an unchecked-capacity
+writer after successful preflight, while partial serialization uses a checked
+single-pass writer.
 
 ## Number formatting
 

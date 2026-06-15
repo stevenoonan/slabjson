@@ -554,12 +554,18 @@ Public API:
 
 ```cpp
 Result<size_t> serialize(Value value, std::span<char> output);
+Result<size_t> serialize_partial(Value value, std::span<char> output);
 Result<size_t> serialize_pretty(Value value, std::span<char> output, uint8_t indent_spaces = 2);
+Result<size_t> serialize_pretty_partial(Value value, std::span<char> output, uint8_t indent_spaces = 2);
 ```
 
 The return value is the number of bytes written, excluding any NUL terminator.
 
 Do not require NUL termination.
+
+`serialize()` and `serialize_pretty()` preserve the output on capacity failure.
+The partial variants perform one pass and may leave a partial JSON document in
+the output span on failure.
 
 Optionally add:
 
