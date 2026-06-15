@@ -163,6 +163,7 @@ private:
         child->parent = Slab::kInvalidNodeId;
         child->next_sibling = Slab::kInvalidNodeId;
         child->key = {};
+        child->key_flags = 0;
         return slab->make_value(child_id);
     }
 };
@@ -341,7 +342,9 @@ private:
             allocation_result.value();
         Slab::Node* node = allocation.node;
 
-        node->number_kind = source.number_kind;
+        node->aux = source.aux;
+        node->key_flags = source.key_flags;
+        node->value_flags = source.value_flags;
         node->payload = source.payload;
 
         if (source.type == ValueType::String) {
@@ -607,7 +610,7 @@ Result<std::size_t> print_unformatted(
         return capacity_result.error();
     }
 
-    auto result = serialize(item, output.first(size_result.value()));
+    auto result = serialize_partial(item, output.first(size_result.value()));
     if (!result) {
         return result.error();
     }
@@ -631,7 +634,7 @@ Result<std::size_t> print_pretty(
         return capacity_result.error();
     }
 
-    auto result = serialize_pretty(
+    auto result = serialize_pretty_partial(
         item,
         output.first(size_result.value()),
         indent_spaces);

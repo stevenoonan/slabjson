@@ -168,7 +168,7 @@ public:
     [[nodiscard]] Result<std::size_t> measure() const noexcept
     {
         CountingWriter writer;
-        return write<true>(writer);
+        return write<true, true>(writer);
     }
 
     [[nodiscard]] Result<std::size_t> write_partial_to(
@@ -179,7 +179,7 @@ public:
         }
 
         CheckedWriter writer{output};
-        return write<true>(writer);
+        return write<true, true>(writer);
     }
 
     [[nodiscard]] Result<std::size_t> write_prevalidated_to(
@@ -190,27 +190,35 @@ public:
         }
 
         UncheckedWriter writer{output};
-        return write<false>(writer);
+        return write<false, false>(writer);
     }
 
 private:
     using NodeId = Slab::NodeId;
 
-    template<bool ValidateUtf8, typename Writer>
+    template<bool ValidateUtf8, bool ValidateGraph, typename Writer>
     [[nodiscard]] Result<std::size_t> write(Writer& writer) const noexcept
     {
-        if (slab_ == nullptr
-            || slab_->node_for(root_id_, generation_) == nullptr) {
+        if (slab_ == nullptr) {
             return Error{ErrorCode::InvalidHandle, 0};
+        }
+        if constexpr (ValidateGraph) {
+            if (slab_->node_for(root_id_, generation_) == nullptr) {
+                return Error{ErrorCode::InvalidHandle, 0};
+            }
         }
 
         NodeId current_id = root_id_;
         std::size_t depth = 0;
         while (true) {
             const Slab::Node* current =
-                slab_->node_for(current_id, generation_);
-            if (current == nullptr) {
-                return Error{ErrorCode::InternalError, 0};
+                ValidateGraph
+                    ? slab_->node_for(current_id, generation_)
+                    : slab_->node_at_unchecked(current_id);
+            if constexpr (ValidateGraph) {
+                if (current == nullptr) {
+                    return Error{ErrorCode::InternalError, 0};
+                }
             }
 
             switch (current->type) {
@@ -237,6 +245,7 @@ private:
             }
             case ValueType::String: {
                 auto string_result = write_string(
+                    current->value_flags,
                     ValidateUtf8,
                     writer,
                     slab_->view_string(current->payload.string_value));
@@ -254,9 +263,13 @@ private:
 
                 if (current->first_child != Slab::kInvalidNodeId) {
                     const Slab::Node* child =
-                        slab_->node_for(current->first_child, generation_);
-                    if (child == nullptr || child->parent != current_id) {
-                        return Error{ErrorCode::InternalError, 0};
+                        ValidateGraph
+                            ? slab_->node_for(current->first_child, generation_)
+                            : slab_->node_at_unchecked(current->first_child);
+                    if constexpr (ValidateGraph) {
+                        if (child == nullptr || child->parent != current_id) {
+                            return Error{ErrorCode::InternalError, 0};
+                        }
                     }
                     if (pretty_) {
                         if (!writer.append('\n')
@@ -293,26 +306,38 @@ private:
                     return writer.size();
                 }
 
-                current = slab_->node_for(current_id, generation_);
-                if (current == nullptr
-                    || current->parent == Slab::kInvalidNodeId) {
-                    return Error{ErrorCode::InternalError, 0};
+                current = ValidateGraph
+                    ? slab_->node_for(current_id, generation_)
+                    : slab_->node_at_unchecked(current_id);
+                if constexpr (ValidateGraph) {
+                    if (current == nullptr
+                        || current->parent == Slab::kInvalidNodeId) {
+                        return Error{ErrorCode::InternalError, 0};
+                    }
                 }
 
                 const NodeId parent_id = current->parent;
                 const Slab::Node* parent =
-                    slab_->node_for(parent_id, generation_);
-                if (parent == nullptr
-                    || (parent->type != ValueType::Array
-                        && parent->type != ValueType::Object)) {
-                    return Error{ErrorCode::InternalError, 0};
+                    ValidateGraph
+                        ? slab_->node_for(parent_id, generation_)
+                        : slab_->node_at_unchecked(parent_id);
+                if constexpr (ValidateGraph) {
+                    if (parent == nullptr
+                        || (parent->type != ValueType::Array
+                            && parent->type != ValueType::Object)) {
+                        return Error{ErrorCode::InternalError, 0};
+                    }
                 }
 
                 if (current->next_sibling != Slab::kInvalidNodeId) {
                     const Slab::Node* sibling =
-                        slab_->node_for(current->next_sibling, generation_);
-                    if (sibling == nullptr || sibling->parent != parent_id) {
-                        return Error{ErrorCode::InternalError, 0};
+                        ValidateGraph
+                            ? slab_->node_for(current->next_sibling, generation_)
+                            : slab_->node_at_unchecked(current->next_sibling);
+                    if constexpr (ValidateGraph) {
+                        if (sibling == nullptr || sibling->parent != parent_id) {
+                            return Error{ErrorCode::InternalError, 0};
+                        }
                     }
                     if (!writer.append(',')) {
                         return Error{ErrorCode::OutputCapacityExceeded, 0};
@@ -368,7 +393,7 @@ private:
     {
         char buffer[64];
         std::to_chars_result result{};
-        switch (node.number_kind) {
+        switch (Slab::node_number_kind(node)) {
         case NumberKind::SignedInteger:
             result = std::to_chars(
                 buffer,
@@ -407,6 +432,7 @@ private:
 
     template<typename Writer>
     [[nodiscard]] Result<void> write_string(
+        std::uint8_t flags,
         bool validate_utf8,
         Writer& writer,
         std::string_view value) const noexcept
@@ -417,6 +443,14 @@ private:
             if (auto invalid = invalid_utf8_offset(value)) {
                 return Error{ErrorCode::InvalidUtf8, *invalid};
             }
+        }
+        if (!Slab::string_needs_json_escape(flags)) {
+            if (!writer.append('"')
+                || !writer.append(value)
+                || !writer.append('"')) {
+                return Error{ErrorCode::OutputCapacityExceeded, 0};
+            }
+            return {};
         }
         if (!writer.append('"')) {
             return Error{ErrorCode::OutputCapacityExceeded, 0};
@@ -496,6 +530,7 @@ private:
         const Slab::Node& child) const noexcept
     {
         auto key_result = write_string(
+            child.key_flags,
             ValidateUtf8,
             writer,
             slab_->view_string(child.key));

@@ -77,6 +77,11 @@ private:
         std::uint16_t length{0};
     };
 
+    struct StoredString {
+        StringRef ref{};
+        std::uint8_t flags{0};
+    };
+
     union Payload {
         bool bool_value;
         std::int64_t signed_integer;
@@ -92,7 +97,9 @@ private:
 
     struct Node {
         ValueType type{ValueType::Null};
-        NumberKind number_kind{NumberKind::FloatingPoint};
+        std::uint8_t aux{static_cast<std::uint8_t>(NumberKind::FloatingPoint)};
+        std::uint8_t key_flags{0};
+        std::uint8_t value_flags{0};
         NodeId parent{kInvalidNodeId};
         NodeId first_child{kInvalidNodeId};
         NodeId last_child{kInvalidNodeId};
@@ -117,8 +124,17 @@ private:
     [[nodiscard]] Result<StringRef> allocate_string(
         std::size_t length) noexcept;
     [[nodiscard]] Result<StringRef> store_string(std::string_view value) noexcept;
+    [[nodiscard]] Result<StoredString> store_string_with_flags(
+        std::string_view value) noexcept;
     [[nodiscard]] Result<StringRef> copy_string_trusted(
         std::string_view value) noexcept;
+    [[nodiscard]] static std::uint8_t string_flags(
+        std::string_view value) noexcept;
+    [[nodiscard]] static bool string_needs_json_escape(
+        std::uint8_t flags) noexcept;
+    [[nodiscard]] static NumberKind node_number_kind(
+        const Node& node) noexcept;
+    static void set_node_number_kind(Node& node, NumberKind kind) noexcept;
     [[nodiscard]] bool can_allocate_node() const noexcept;
     [[nodiscard]] Result<void> validate_attachment(
         NodeId parent_id,

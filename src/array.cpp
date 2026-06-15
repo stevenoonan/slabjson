@@ -33,6 +33,7 @@ Result<void> Array::add(Value child) noexcept
 
     auto* child_node = slab_->node_for(child.id_, child.generation_);
     child_node->key = {};
+    child_node->key_flags = 0;
     slab_->append_child_unchecked(id_, child.id_);
     return {};
 }

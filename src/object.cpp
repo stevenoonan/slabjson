@@ -50,13 +50,14 @@ Result<void> Object::add(std::string_view key, Value child) noexcept
         return validation.error();
     }
 
-    auto key_result = slab_->store_string(key);
+    auto key_result = slab_->store_string_with_flags(key);
     if (!key_result) {
         return key_result.error();
     }
 
     auto* child_node = slab_->node_for(child.id_, child.generation_);
-    child_node->key = key_result.value();
+    child_node->key = key_result.value().ref;
+    child_node->key_flags = key_result.value().flags;
     slab_->append_child_unchecked(id_, child.id_);
     return {};
 }
@@ -395,6 +396,7 @@ Result<void> Object::remove(std::string_view key) noexcept
             child->parent = Slab::kInvalidNodeId;
             child->next_sibling = Slab::kInvalidNodeId;
             child->key = {};
+            child->key_flags = 0;
             return {};
         }
 

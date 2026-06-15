@@ -109,7 +109,7 @@ Result<Value> Slab::make_number(double value) noexcept
 
     const NodeId id = node_result.value();
     Node* node = node_for(id, generation_);
-    node->number_kind = NumberKind::FloatingPoint;
+    set_node_number_kind(*node, NumberKind::FloatingPoint);
     node->payload.floating_point = value;
     return make_value(id);
 }
@@ -123,7 +123,7 @@ Result<Value> Slab::make_number(std::int64_t value) noexcept
 
     const NodeId id = node_result.value();
     Node* node = node_for(id, generation_);
-    node->number_kind = NumberKind::SignedInteger;
+    set_node_number_kind(*node, NumberKind::SignedInteger);
     node->payload.signed_integer = value;
     return make_value(id);
 }
@@ -137,7 +137,7 @@ Result<Value> Slab::make_number(std::uint64_t value) noexcept
 
     const NodeId id = node_result.value();
     Node* node = node_for(id, generation_);
-    node->number_kind = NumberKind::UnsignedInteger;
+    set_node_number_kind(*node, NumberKind::UnsignedInteger);
     node->payload.unsigned_integer = value;
     return make_value(id);
 }
@@ -172,13 +172,15 @@ Result<Value> Slab::make_string(std::string_view value) noexcept
     if (!node_result) {
         return node_result.error();
     }
-    auto string_result = store_string(value);
+    auto string_result = copy_string_trusted(value);
     if (!string_result) {
         return Error{ErrorCode::InternalError, 0};
     }
 
     const NodeId id = node_result.value();
-    node_for(id, generation_)->payload.string_value = string_result.value();
+    Node* node = node_for(id, generation_);
+    node->payload.string_value = string_result.value();
+    node->value_flags = string_flags(value);
     return make_value(id);
 }
 
@@ -232,11 +234,25 @@ Result<Slab::NodeAllocation> Slab::allocate_node_with_pointer(
 
 Result<Slab::StringRef> Slab::store_string(std::string_view value) noexcept
 {
+    auto stored = store_string_with_flags(value);
+    if (!stored) {
+        return stored.error();
+    }
+    return stored.value().ref;
+}
+
+Result<Slab::StoredString> Slab::store_string_with_flags(
+    std::string_view value) noexcept
+{
     if (auto invalid = detail::invalid_utf8_offset(value)) {
         return Error{ErrorCode::InvalidUtf8, *invalid};
     }
 
-    return copy_string_trusted(value);
+    auto copied = copy_string_trusted(value);
+    if (!copied) {
+        return copied.error();
+    }
+    return StoredString{copied.value(), string_flags(value)};
 }
 
 Result<Slab::StringRef> Slab::copy_string_trusted(
@@ -288,6 +304,34 @@ bool Slab::can_allocate_node() const noexcept
     const std::size_t node_bytes_after =
         (static_cast<std::size_t>(node_count_) + 1) * sizeof(Node);
     return node_bytes_after <= storage_.size() - string_bytes_used_;
+}
+
+std::uint8_t Slab::string_flags(std::string_view value) noexcept
+{
+    static constexpr std::uint8_t kNeedsJsonEscape = 0x01;
+
+    for (unsigned char character : value) {
+        if (character == '"' || character == '\\' || character < 0x20) {
+            return kNeedsJsonEscape;
+        }
+    }
+    return 0;
+}
+
+bool Slab::string_needs_json_escape(std::uint8_t flags) noexcept
+{
+    static constexpr std::uint8_t kNeedsJsonEscape = 0x01;
+    return (flags & kNeedsJsonEscape) != 0;
+}
+
+NumberKind Slab::node_number_kind(const Node& node) noexcept
+{
+    return static_cast<NumberKind>(node.aux);
+}
+
+void Slab::set_node_number_kind(Node& node, NumberKind kind) noexcept
+{
+    node.aux = static_cast<std::uint8_t>(kind);
 }
 
 Result<void> Slab::validate_attachment(

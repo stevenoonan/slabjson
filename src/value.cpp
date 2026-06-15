@@ -92,7 +92,7 @@ std::optional<double> Value::as_number() const noexcept
     if (node == nullptr || node->type != ValueType::Number) {
         return std::nullopt;
     }
-    switch (node->number_kind) {
+    switch (Slab::node_number_kind(*node)) {
     case NumberKind::SignedInteger:
         return static_cast<double>(node->payload.signed_integer);
     case NumberKind::UnsignedInteger:
@@ -111,7 +111,7 @@ std::optional<NumberKind> Value::number_kind() const noexcept
     if (node == nullptr || node->type != ValueType::Number) {
         return std::nullopt;
     }
-    return node->number_kind;
+    return Slab::node_number_kind(*node);
 }
 
 std::optional<std::int64_t> Value::as_int64() const noexcept
@@ -121,7 +121,7 @@ std::optional<std::int64_t> Value::as_int64() const noexcept
         : slab_->node_for(id_, generation_);
     if (node == nullptr
         || node->type != ValueType::Number
-        || node->number_kind != NumberKind::SignedInteger) {
+        || Slab::node_number_kind(*node) != NumberKind::SignedInteger) {
         return std::nullopt;
     }
     return node->payload.signed_integer;
@@ -134,7 +134,7 @@ std::optional<std::uint64_t> Value::as_uint64() const noexcept
         : slab_->node_for(id_, generation_);
     if (node == nullptr
         || node->type != ValueType::Number
-        || node->number_kind != NumberKind::UnsignedInteger) {
+        || Slab::node_number_kind(*node) != NumberKind::UnsignedInteger) {
         return std::nullopt;
     }
     return node->payload.unsigned_integer;

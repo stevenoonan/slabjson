@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <string_view>
 #include <utility>
@@ -63,6 +64,13 @@ private:
     struct StringScan {
         std::size_t end;
         std::size_t decoded_length;
+        bool has_escape;
+        std::uint8_t flags;
+    };
+
+    struct ParsedString {
+        Slab::StringRef ref;
+        std::uint8_t flags;
     };
 
     [[nodiscard]] Result<Value> parse_value(std::uint16_t depth) noexcept
@@ -245,8 +253,9 @@ private:
         if (!string_result) {
             return string_result.error();
         }
-        slab_.node_for(id, slab_.generation_)->payload.string_value =
-            string_result.value();
+        Slab::Node* node = slab_.node_for(id, slab_.generation_);
+        node->payload.string_value = string_result.value().ref;
+        node->value_flags = string_result.value().flags;
         return slab_.make_value(id);
     }
 
@@ -352,7 +361,8 @@ private:
             }
             Slab::Node* child =
                 slab_.node_for(child_result.value().id_, slab_.generation_);
-            child->key = key_result.value();
+            child->key = key_result.value().ref;
+            child->key_flags = key_result.value().flags;
             slab_.append_child_unchecked(
                 object_value.id_,
                 child_result.value().id_);
@@ -376,7 +386,7 @@ private:
         }
     }
 
-    [[nodiscard]] Result<Slab::StringRef> parse_string() noexcept
+    [[nodiscard]] Result<ParsedString> parse_string() noexcept
     {
         const std::size_t start = position_;
         auto scan_result = scan_string(start);
@@ -391,9 +401,19 @@ private:
             return Error{allocation.error().code, start};
         }
         const Slab::StringRef ref = allocation.value();
-        decode_string(start, scan.end, ref);
+        if (!scan.has_escape) {
+            const std::size_t source_length = scan.end - start - 2;
+            if (source_length != 0) {
+                std::memcpy(
+                    slab_.storage_.data() + ref.offset,
+                    input_.data() + start + 1,
+                    source_length);
+            }
+        } else {
+            decode_string(start, scan.end, ref);
+        }
         position_ = scan.end;
-        return ref;
+        return ParsedString{ref, scan.flags};
     }
 
     [[nodiscard]] Result<StringScan> scan_string(
@@ -401,17 +421,25 @@ private:
     {
         std::size_t cursor = start + 1;
         std::size_t decoded_length = 0;
+        bool has_escape = false;
+        std::uint8_t flags = 0;
 
         while (cursor < input_.size()) {
             const auto byte =
                 static_cast<unsigned char>(input_[cursor]);
             if (byte == '"') {
-                return StringScan{cursor + 1, decoded_length};
+                return StringScan{
+                    cursor + 1,
+                    decoded_length,
+                    has_escape,
+                    flags,
+                };
             }
             if (byte < 0x20) {
                 return Error{ErrorCode::ParseInvalidString, cursor};
             }
             if (byte == '\\') {
+                has_escape = true;
                 ++cursor;
                 if (cursor == input_.size()) {
                     return Error{
@@ -423,12 +451,16 @@ private:
                 switch (input_[cursor]) {
                 case '"':
                 case '\\':
-                case '/':
                 case 'b':
                 case 'f':
                 case 'n':
                 case 'r':
                 case 't':
+                    flags = 0x01;
+                    ++decoded_length;
+                    ++cursor;
+                    break;
+                case '/':
                     ++decoded_length;
                     ++cursor;
                     break;
@@ -476,6 +508,11 @@ private:
                     }
 
                     decoded_length += utf8_length(code_point);
+                    if (code_point == '"'
+                        || code_point == '\\'
+                        || code_point < 0x20) {
+                        flags = 0x01;
+                    }
                     break;
                 }
                 default:
@@ -574,13 +611,12 @@ private:
                 ++cursor;
             } else {
                 const std::size_t length =
-                    validate_utf8(cursor).value();
-                for (std::size_t index = 0; index < length; ++index) {
-                    destination[output++] = std::byte{
-                        static_cast<unsigned char>(
-                            input_[cursor + index]),
-                    };
-                }
+                    unchecked_utf8_length(input_[cursor]);
+                std::memcpy(
+                    destination + output,
+                    input_.data() + cursor,
+                    length);
+                output += length;
                 cursor += length;
             }
         }
@@ -754,6 +790,22 @@ private:
             return 2;
         }
         if (code_point <= 0xffff) {
+            return 3;
+        }
+        return 4;
+    }
+
+    [[nodiscard]] static std::size_t unchecked_utf8_length(
+        char first_byte) noexcept
+    {
+        const auto first = static_cast<unsigned char>(first_byte);
+        if (first < 0x80) {
+            return 1;
+        }
+        if (first < 0xe0) {
+            return 2;
+        }
+        if (first < 0xf0) {
             return 3;
         }
         return 4;
