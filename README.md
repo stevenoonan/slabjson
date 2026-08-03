@@ -1,10 +1,14 @@
 # SlabJson
 
+[![CI](https://github.com/stevenoonan/slabjson/actions/workflows/ci.yml/badge.svg)](https://github.com/stevenoonan/slabjson/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/stevenoonan/slabjson/actions/workflows/codeql.yml/badge.svg)](https://github.com/stevenoonan/slabjson/actions/workflows/codeql.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 **SlabJson** is a C++20 JSON library that does not use heap allocation. This makes it ideal for memory-constrained systems, embedded firmware, and other environments where predictable memory behavior matters.
 
 Instead of allocating a JSON tree with `malloc()`/`free()` or `new`/`delete`, SlabJson stores the entire DOM inside a caller-provided fixed-size memory slab. Values are represented by lightweight handles, and all storage is reclaimed at once by resetting the slab.
 
-This also makes SlabJson very fast. In the included benchmark suite, SlabJson is typically around 2 - 4× faster than cJSON. 
+This also makes SlabJson very fast. In the included benchmark suite, SlabJson is typically around 2 - 4× faster than cJSON.
 
 ## Why SlabJson?
 
@@ -41,7 +45,7 @@ It is especially suitable for:
 * Single-pass partial serialization API
 * Compact and pretty serialization
 * cJSON-style compatibility helpers
-* GoogleTest/Catch2-style host test suite
+* Allocation-free host test suite and JSONTestSuite conformance runner
 
 ## Non-goals
 
@@ -76,15 +80,18 @@ int main()
 
     auto root = root_result.value();
 
-    root.add("device_id", "widget-123");
-    root.add("battery_mv", 4120);
-    root.add("connected", true);
+    if (!root.add("device_id", "widget-123")
+        || !root.add("battery_mv", 4120)
+        || !root.add("connected", true)) {
+        return 1;
+    }
 
     auto tags_result = root.add_array("tags");
     if (tags_result) {
         auto tags = tags_result.value();
-        tags.add("widget");
-        tags.add("production");
+        if (!tags.add("widget") || !tags.add("production")) {
+            return 1;
+        }
     }
 
     std::array<char, 512> output{};
@@ -305,6 +312,60 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
+The repository also provides `debug`, `release`, `sanitizer`, and
+`no-exceptions` configure/build/test presets. For example:
+
+```bash
+cmake --preset debug
+cmake --build --preset debug
+ctest --preset debug
+```
+
+Tests default to `ON` for a top-level SlabJson build and `OFF` when SlabJson is
+included by another CMake project.
+
+## Consuming with CMake
+
+SlabJson is always a static library. Link the namespaced target in every
+consumption mode:
+
+```cmake
+target_link_libraries(my_app PRIVATE slabjson::slabjson)
+```
+
+### As a subdirectory
+
+```cmake
+add_subdirectory(path/to/slabjson)
+target_link_libraries(my_app PRIVATE slabjson::slabjson)
+```
+
+### With FetchContent
+
+```cmake
+include(FetchContent)
+FetchContent_Declare(slabjson
+    GIT_REPOSITORY https://github.com/stevenoonan/slabjson.git
+    GIT_TAG v0.9.0
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(slabjson)
+target_link_libraries(my_app PRIVATE slabjson::slabjson)
+```
+
+### As an installed package
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+cmake --install build --prefix /your/install/prefix
+```
+
+```cmake
+find_package(slabjson 0.9 CONFIG REQUIRED)
+target_link_libraries(my_app PRIVATE slabjson::slabjson)
+```
+
 Build with link-time optimization:
 
 ```bash
@@ -338,7 +399,7 @@ python3 benchmarks/show_timing_report.py
 
 | Option                       | Default | Description                                       |
 | ---------------------------- | ------: | ------------------------------------------------- |
-| `SLABJSON_BUILD_TESTS`       |    `ON` | Build unit tests                                  |
+| `SLABJSON_BUILD_TESTS`       | Top-level only | Build unit and consumer tests                |
 | `SLABJSON_BUILD_BENCHMARKS`  |   `OFF` | Build host benchmark suite                        |
 | `SLABJSON_ENABLE_EXCEPTIONS` |   `OFF` | Allow exceptions; core code does not require them |
 | `SLABJSON_ENABLE_LTO`        |   `OFF` | Enable CMake IPO/LTO when supported               |
@@ -369,9 +430,16 @@ Individual results ranged from 1.15x faster for parsing the small, pretty Twitte
 
 Benchmark results will vary by compiler, standard library, CPU, optimization level, and corpus shape. CPU scaling and ASLR were enabled during this run, so small run-to-run variations are expected.
 
-## Current status
+## Compatibility and support
 
-SlabJson is an early-stage embedded-oriented JSON DOM library. The core API is usable, but the project should still be treated as pre-1.0 unless and until the API is explicitly frozen.
+SlabJson 0.9 is a pre-1.0 release. Public headers and the
+`slabjson::slabjson` CMake target may still change before 1.0. Patch releases
+within 0.9.x maintain source and package compatibility; a new 0.x minor release
+may contain breaking changes.
+
+The library requires C++20 and CMake 3.20. CI records the host compilers tested
+on Linux, Windows, and macOS; specific compiler versions are not contractual
+minimums. Embedded projects should validate their target toolchain and limits.
 
 Before using it in production firmware, consider adding project-specific tests for:
 
@@ -400,4 +468,4 @@ Use the umbrella include for most application code:
 
 ## License
 
-Add the project license here before publishing the repository.
+SlabJson is available under the [MIT License](LICENSE).

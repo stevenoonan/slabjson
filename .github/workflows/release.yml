@@ -1,0 +1,117 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate release metadata
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Match tag, project version, and changelog
+        run: >-
+          cmake -DSLABJSON_SOURCE_DIR=.
+          -DSLABJSON_TAG=${{ github.ref_name }}
+          -P cmake/ValidateRelease.cmake
+
+  verify:
+    needs: validate
+    uses: ./.github/workflows/verify.yml
+
+  publish:
+    name: Publish source release
+    needs: [validate, verify]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Verify pinned FetchContent consumption
+        run: |
+          cmake -S tests/consumer-fetchcontent -B fetchcontent-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSLABJSON_GIT_REPOSITORY=https://github.com/stevenoonan/slabjson.git \
+            -DSLABJSON_GIT_TAG=${{ github.ref_name }}
+          cmake --build fetchcontent-build --parallel
+          ctest --test-dir fetchcontent-build --output-on-failure
+
+      - name: Create source archives and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          prefix="slabjson-${version}/"
+          mkdir dist
+          git archive --format=tar --prefix="${prefix}" "${GITHUB_SHA}" > "dist/slabjson-${version}.tar"
+          gzip -n "dist/slabjson-${version}.tar"
+          git archive --format=zip --prefix="${prefix}" \
+            --output="dist/slabjson-${version}.zip" "${GITHUB_SHA}"
+          cd dist
+          sha256sum "slabjson-${version}.tar.gz" "slabjson-${version}.zip" > SHA256SUMS
+          sha256sum --check SHA256SUMS
+
+      - name: Inspect source archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          prefix="slabjson-${version}"
+          required=(
+            CMakeLists.txt
+            CMakePresets.json
+            LICENSE
+            README.md
+            CHANGELOG.md
+            CONTRIBUTING.md
+            SECURITY.md
+            RELEASING.md
+            cmake/RunConsumerTest.cmake
+            cmake/ValidateRelease.cmake
+            cmake/slabjsonConfig.cmake.in
+            include/slabjson/slabjson.hpp
+            include/slabjson/result.hpp
+            src/parse.cpp
+            src/value.cpp
+            tests/CMakeLists.txt
+          )
+          tar -tzf "dist/slabjson-${version}.tar.gz" > /tmp/slabjson-tar-contents
+          unzip -Z1 "dist/slabjson-${version}.zip" > /tmp/slabjson-zip-contents
+          for path in "${required[@]}"; do
+            grep -Fxq "${prefix}/${path}" /tmp/slabjson-tar-contents
+            grep -Fxq "${prefix}/${path}" /tmp/slabjson-zip-contents
+          done
+          cd dist
+          sha256sum --check SHA256SUMS
+
+      - name: Attest source archives
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4
+        with:
+          subject-checksums: dist/SHA256SUMS
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          gh release create "${GITHUB_REF_NAME}" \
+            "dist/slabjson-${version}.tar.gz" \
+            "dist/slabjson-${version}.zip" \
+            dist/SHA256SUMS \
+            --verify-tag \
+            --generate-notes \
+            --title "SlabJson ${version}"

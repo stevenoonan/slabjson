@@ -1,0 +1,168 @@
+name: Reusable verification
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: ${{ matrix.platform }} / ${{ matrix.compiler }} / ${{ matrix.build_type }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: Linux
+            compiler: GCC
+            cc: gcc
+            cxx: g++
+            build_type: Debug
+          - os: ubuntu-latest
+            platform: Linux
+            compiler: GCC
+            cc: gcc
+            cxx: g++
+            build_type: Release
+          - os: ubuntu-latest
+            platform: Linux
+            compiler: Clang
+            cc: clang
+            cxx: clang++
+            build_type: Debug
+          - os: ubuntu-latest
+            platform: Linux
+            compiler: Clang
+            cc: clang
+            cxx: clang++
+            build_type: Release
+          - os: windows-latest
+            platform: Windows
+            compiler: MSVC
+            cc: cl
+            cxx: cl
+            build_type: Debug
+          - os: windows-latest
+            platform: Windows
+            compiler: MSVC
+            cc: cl
+            cxx: cl
+            build_type: Release
+          - os: macos-latest
+            platform: macOS
+            compiler: AppleClang
+            cc: clang
+            cxx: clang++
+            build_type: Debug
+          - os: macos-latest
+            platform: macOS
+            compiler: AppleClang
+            cc: clang
+            cxx: clang++
+            build_type: Release
+    runs-on: ${{ matrix.os }}
+    env:
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Configure
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          -DSLABJSON_BUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: >-
+          ctest --test-dir build
+          --build-config ${{ matrix.build_type }}
+          --output-on-failure
+
+  sanitizer:
+    name: Linux / Clang / ASan+UBSan
+    runs-on: ubuntu-latest
+    env:
+      CC: clang
+      CXX: clang++
+      ASAN_OPTIONS: detect_leaks=0
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Configure
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DSLABJSON_BUILD_TESTS=ON
+          "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-omit-frame-pointer"
+          -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  no-exceptions-no-rtti:
+    name: Linux / GCC / no exceptions or RTTI
+    runs-on: ubuntu-latest
+    env:
+      CC: gcc
+      CXX: g++
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Configure
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DSLABJSON_BUILD_TESTS=ON
+          -DSLABJSON_ENABLE_EXCEPTIONS=OFF
+          "-DCMAKE_CXX_FLAGS=-fno-exceptions -fno-rtti"
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  exceptions-enabled:
+    name: Linux / GCC / exceptions enabled
+    runs-on: ubuntu-latest
+    env:
+      CC: gcc
+      CXX: g++
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Configure
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DSLABJSON_BUILD_TESTS=ON
+          -DSLABJSON_ENABLE_EXCEPTIONS=ON
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  lto:
+    name: Linux / GCC / Release LTO
+    runs-on: ubuntu-latest
+    env:
+      CC: gcc
+      CXX: g++
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Configure
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DSLABJSON_BUILD_TESTS=ON
+          -DSLABJSON_ENABLE_LTO=ON
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
