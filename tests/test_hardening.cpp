@@ -7,14 +7,58 @@
 #include <limits>
 #include <span>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 
 #include <slabjson/slabjson.hpp>
 
 static_assert(std::forward_iterator<slabjson::Array::iterator>);
 static_assert(std::forward_iterator<slabjson::Object::iterator>);
+static_assert(std::is_nothrow_move_constructible_v<slabjson::Result<int>>);
+static_assert(std::is_nothrow_move_assignable_v<slabjson::Result<int>>);
 
 namespace {
+
+struct ThrowingMovePayload {
+    ThrowingMovePayload(ThrowingMovePayload&&) noexcept(false);
+};
+
+static_assert(!slabjson::detail::ResultPayload<ThrowingMovePayload>);
+
+#if defined(__cpp_exceptions) || defined(_CPPUNWIND)
+
+struct CopyFailure {
+};
+
+class ThrowingCopyPayload {
+public:
+    explicit ThrowingCopyPayload(int value) noexcept
+        : value_(value)
+    {
+    }
+
+    ThrowingCopyPayload(const ThrowingCopyPayload& other)
+        : value_(other.value_)
+    {
+        throw CopyFailure{};
+    }
+
+    ThrowingCopyPayload(ThrowingCopyPayload&& other) noexcept
+        : value_(other.value_)
+    {
+        other.value_ = 0;
+    }
+
+    [[nodiscard]] int value() const noexcept
+    {
+        return value_;
+    }
+
+private:
+    int value_;
+};
+
+#endif
 
 int failures = 0;
 
@@ -95,6 +139,28 @@ int main()
         self_move_assign(other_value);
         CHECK(other_value && other_value.value() == 2);
     }
+
+#if defined(__cpp_exceptions) || defined(_CPPUNWIND)
+    {
+        slabjson::Result<ThrowingCopyPayload> source{
+            ThrowingCopyPayload{1},
+        };
+        slabjson::Result<ThrowingCopyPayload> destination{
+            ThrowingCopyPayload{2},
+        };
+
+        bool copy_threw = false;
+        try {
+            destination = source;
+        } catch (const CopyFailure&) {
+            copy_threw = true;
+        }
+
+        CHECK(copy_threw);
+        CHECK(destination);
+        CHECK(destination.value().value() == 2);
+    }
+#endif
 
     {
         slabjson::StaticSlab<4096> slab;
