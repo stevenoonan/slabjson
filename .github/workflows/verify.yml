@@ -71,9 +71,50 @@ jobs:
 
       - name: Set up MSVC developer command prompt
         if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
-        with:
-          arch: amd64
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} `
+            'Microsoft Visual Studio\Installer\vswhere.exe'
+          if (-not (Test-Path $vswhere)) {
+            throw "vswhere.exe was not found at $vswhere"
+          }
+
+          $installationPath = & $vswhere -latest -products '*' `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+            -property installationPath
+          if (-not $installationPath) {
+            throw 'A Visual Studio installation with the MSVC toolchain was not found'
+          }
+
+          $devCmd = Join-Path $installationPath 'Common7\Tools\VsDevCmd.bat'
+          if (-not (Test-Path $devCmd)) {
+            throw "VsDevCmd.bat was not found at $devCmd"
+          }
+
+          $originalEnvironment = @{}
+          Get-ChildItem Env: | ForEach-Object {
+            $originalEnvironment[$_.Name] = $_.Value
+          }
+
+          $environment = & $env:ComSpec /d /s /c `
+            "call `"$devCmd`" -no_logo -arch=amd64 -host_arch=amd64 && set"
+          if ($LASTEXITCODE -ne 0) {
+            throw "VsDevCmd.bat failed with exit code $LASTEXITCODE"
+          }
+
+          foreach ($line in $environment) {
+            if ($line -notmatch '^([^=][^=]*)=(.*)$') {
+              continue
+            }
+
+            $name = $Matches[1]
+            $value = $Matches[2]
+            if (-not $originalEnvironment.ContainsKey($name) -or
+                $originalEnvironment[$name] -ne $value) {
+              "$name=$value" | Out-File -FilePath $env:GITHUB_ENV `
+                -Encoding utf8 -Append
+            }
+          }
 
       - name: Configure
         run: >-
