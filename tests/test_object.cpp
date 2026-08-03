@@ -131,8 +131,8 @@ int main()
         CHECK(unsigned_as_int64.error().code == slabjson::ErrorCode::TypeMismatch);
 
         auto signed_as_uint64 = root.get_uint64("count");
-        CHECK(!signed_as_uint64);
-        CHECK(signed_as_uint64.error().code == slabjson::ErrorCode::TypeMismatch);
+        CHECK(signed_as_uint64);
+        CHECK(signed_as_uint64.value() == 7);
 
         auto string_as_number = root.get_number("name");
         CHECK(!string_as_number);

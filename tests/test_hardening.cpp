@@ -185,6 +185,10 @@ int main()
             maximum.value().as_int64()
             == std::numeric_limits<std::int64_t>::max());
         CHECK(
+            maximum.value().as_uint64()
+            == static_cast<std::uint64_t>(
+                std::numeric_limits<std::int64_t>::max()));
+        CHECK(
             unsigned_maximum.value().number_kind()
             == slabjson::NumberKind::UnsignedInteger);
         CHECK(
@@ -247,6 +251,7 @@ int main()
         CHECK(
             object.find("unsigned")->number_kind()
             == slabjson::NumberKind::UnsignedInteger);
+        CHECK(object.find("unsigned")->as_int64() == 6);
         CHECK(
             object.find("uint64")->as_uint64()
             == std::uint64_t{9007199254740993ULL});
@@ -271,6 +276,10 @@ int main()
             parsed_max.value().as_int64()
             == std::numeric_limits<std::int64_t>::max());
         CHECK(
+            parsed_max.value().as_uint64()
+            == static_cast<std::uint64_t>(
+                std::numeric_limits<std::int64_t>::max()));
+        CHECK(
             parsed_unsigned.value().as_uint64()
             == std::numeric_limits<std::uint64_t>::max());
         CHECK(
@@ -279,6 +288,8 @@ int main()
         CHECK(
             parsed_float.value().number_kind()
             == slabjson::NumberKind::FloatingPoint);
+        CHECK(!parsed_float.value().as_int64());
+        CHECK(!parsed_float.value().as_uint64());
 
         const std::size_t used_before = slab.used_bytes();
         auto overflow =

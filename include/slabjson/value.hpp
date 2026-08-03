@@ -46,7 +46,11 @@ public:
     [[nodiscard]] bool is_object() const noexcept;
 
     [[nodiscard]] std::optional<bool> as_bool() const noexcept;
+    // Reports the current storage representation, which may change after a
+    // JSON serialization and parse round trip.
     [[nodiscard]] std::optional<NumberKind> number_kind() const noexcept;
+    // Integral accessors perform checked, lossless conversion between signed
+    // and unsigned integer storage. Floating-point storage is not converted.
     [[nodiscard]] std::optional<std::int64_t> as_int64() const noexcept;
     [[nodiscard]] std::optional<std::uint64_t> as_uint64() const noexcept;
     // Exact integers may be rounded when converted to double.

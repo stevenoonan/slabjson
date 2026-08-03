@@ -177,33 +177,6 @@ auto written = slabjson::serialize_pretty_partial(value, output, 2);
 
 Use transactional serialization when the caller needs all-or-nothing output. Use partial serialization when the caller already controls buffer sizing or can tolerate partial output on failure.
 
-## Exact number handling
-
-SlabJson stores JSON numbers as one of three kinds:
-
-```cpp
-enum class NumberKind : std::uint8_t {
-    SignedInteger,
-    UnsignedInteger,
-    FloatingPoint
-};
-```
-
-This preserves exact signed and unsigned integer values instead of converting every number to `double`.
-
-```cpp
-auto value = object.find("sequence");
-if (value && value->is_number()) {
-    auto kind = value->number_kind();
-
-    if (kind == slabjson::NumberKind::UnsignedInteger) {
-        auto sequence = value->as_uint64();
-    }
-}
-```
-
-`as_number()` is still available when a floating-point view is desired, but exact integers may be rounded when converted to `double`.
-
 ## Fixed storage model
 
 A slab can either use caller-provided memory:

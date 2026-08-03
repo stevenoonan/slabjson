@@ -1,5 +1,7 @@
 #include <slabjson/value.hpp>
 
+#include <limits>
+
 #include <slabjson/containers.hpp>
 #include <slabjson/slab.hpp>
 
@@ -119,12 +121,25 @@ std::optional<std::int64_t> Value::as_int64() const noexcept
     const auto* node = slab_ == nullptr
         ? nullptr
         : slab_->node_for(id_, generation_);
-    if (node == nullptr
-        || node->type != ValueType::Number
-        || Slab::node_number_kind(*node) != NumberKind::SignedInteger) {
+    if (node == nullptr || node->type != ValueType::Number) {
         return std::nullopt;
     }
-    return node->payload.signed_integer;
+
+    switch (Slab::node_number_kind(*node)) {
+    case NumberKind::SignedInteger:
+        return node->payload.signed_integer;
+    case NumberKind::UnsignedInteger:
+        if (node->payload.unsigned_integer
+            <= static_cast<std::uint64_t>(
+                std::numeric_limits<std::int64_t>::max())) {
+            return static_cast<std::int64_t>(
+                node->payload.unsigned_integer);
+        }
+        return std::nullopt;
+    case NumberKind::FloatingPoint:
+        return std::nullopt;
+    }
+    return std::nullopt;
 }
 
 std::optional<std::uint64_t> Value::as_uint64() const noexcept
@@ -132,12 +147,23 @@ std::optional<std::uint64_t> Value::as_uint64() const noexcept
     const auto* node = slab_ == nullptr
         ? nullptr
         : slab_->node_for(id_, generation_);
-    if (node == nullptr
-        || node->type != ValueType::Number
-        || Slab::node_number_kind(*node) != NumberKind::UnsignedInteger) {
+    if (node == nullptr || node->type != ValueType::Number) {
         return std::nullopt;
     }
-    return node->payload.unsigned_integer;
+
+    switch (Slab::node_number_kind(*node)) {
+    case NumberKind::SignedInteger:
+        if (node->payload.signed_integer >= 0) {
+            return static_cast<std::uint64_t>(
+                node->payload.signed_integer);
+        }
+        return std::nullopt;
+    case NumberKind::UnsignedInteger:
+        return node->payload.unsigned_integer;
+    case NumberKind::FloatingPoint:
+        return std::nullopt;
+    }
+    return std::nullopt;
 }
 
 std::optional<std::string_view> Value::as_string() const noexcept
