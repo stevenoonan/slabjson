@@ -109,7 +109,7 @@ int main()
         CHECK(root_result);
         auto root = root_result.value();
 
-        CHECK(root.add("device_id", "hub-123"));
+        CHECK(root.add("device_id", "widget-123"));
         CHECK(root.add("battery_mv", 4120));
         CHECK(root.add("connected", true));
         CHECK(root.add_null("fault"));
@@ -117,7 +117,7 @@ int main()
         auto tags_result = root.add_array("tags");
         CHECK(tags_result);
         auto tags = tags_result.value();
-        CHECK(tags.add("hub"));
+        CHECK(tags.add("widget"));
         CHECK(tags.add("production"));
 
         auto metadata_result = root.add_object("metadata");
@@ -130,12 +130,12 @@ int main()
 
         CHECK_SERIALIZES(
             root,
-            "{\"device_id\":\"hub-123\",\"battery_mv\":4120,"
+            "{\"device_id\":\"widget-123\",\"battery_mv\":4120,"
             "\"connected\":true,\"fault\":null,"
-            "\"tags\":[\"hub\",\"production\"],"
+            "\"tags\":[\"widget\",\"production\"],"
             "\"metadata\":{\"version\":2,\"flags\":[false]}}");
 
-        CHECK_SERIALIZES(tags, "[\"hub\",\"production\"]");
+        CHECK_SERIALIZES(tags, "[\"widget\",\"production\"]");
 
         auto pretty_size = slabjson::serialized_size_pretty(root, 2);
         CHECK(pretty_size);
@@ -146,12 +146,12 @@ int main()
         CHECK(pretty_result.value() == pretty_size.value());
         const std::string_view expected_pretty =
             "{\n"
-            "  \"device_id\": \"hub-123\",\n"
+            "  \"device_id\": \"widget-123\",\n"
             "  \"battery_mv\": 4120,\n"
             "  \"connected\": true,\n"
             "  \"fault\": null,\n"
             "  \"tags\": [\n"
-            "    \"hub\",\n"
+            "    \"widget\",\n"
             "    \"production\"\n"
             "  ],\n"
             "  \"metadata\": {\n"
@@ -185,7 +185,7 @@ int main()
         CHECK((std::string_view{
             zero_indent_output.data(),
             zero_indent.value(),
-        }.starts_with("{\n\"device_id\": \"hub-123\"")));
+        }.starts_with("{\n\"device_id\": \"widget-123\"")));
 
         std::array<char, 8> pretty_small;
         pretty_small.fill('#');

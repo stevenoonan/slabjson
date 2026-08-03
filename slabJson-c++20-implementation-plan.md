@@ -23,7 +23,7 @@ if (!root_result) {
 }
 
 auto root = root_result.value();
-root.add("device_id", "hub-123");
+root.add("device_id", "widget-123");
 root.add("battery_mv", 4120);
 ```
 
@@ -904,7 +904,7 @@ Capacity:
 Expected serialization should be compact by default:
 
 ```json
-{"device_id":"hub-123","battery_mv":4120}
+{"device_id":"widget-123","battery_mv":4120}
 ```
 
 Pretty serialization can come later if needed.
@@ -1077,14 +1077,14 @@ void example()
 
     auto root = root_result.value();
 
-    root.add("device_id", "hub-123");
+    root.add("device_id", "widget-123");
     root.add("battery_mv", 4120);
     root.add("connected", true);
 
     auto tags_result = root.add_array("tags");
     if (tags_result) {
         auto tags = tags_result.value();
-        tags.add("hub");
+        tags.add("widget");
         tags.add("production");
     }
 
