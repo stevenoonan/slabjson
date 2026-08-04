@@ -66,11 +66,9 @@ int main()
 
     auto root = root_result.value();
 
-    if (!root.add("device_id", "widget-123")
-        || !root.add("battery_mv", 4120)
-        || !root.add("connected", true)) {
-        return 1;
-    }
+    root.add("device_id", "widget-123");
+    root.add("battery_mv", 4120);
+    root.add("connected", true);
 
     auto tags_result = root.add_array("tags");
     if (!tags_result) {
@@ -78,7 +76,10 @@ int main()
     }
 
     auto tags = tags_result.value();
-    if (!tags.add("widget") || !tags.add("production")) {
+    tags.add("widget");
+    tags.add("production");
+
+    if (!root.status()) {
         return 1;
     }
 
@@ -92,6 +93,13 @@ int main()
     return 0;
 }
 ```
+
+`Object::add*` and `Array::add*` record the first addition error in the slab.
+Later additions through any handle for that slab are no-ops and return the same
+error, so a construction sequence can use one final `status()` check. An
+individual addition result can still be checked immediately. Call
+`clear_error()` to recover explicitly, or `reset()` to clear both the DOM and
+the recorded error.
 
 Example output:
 

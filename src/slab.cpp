@@ -21,6 +21,7 @@ void Slab::initialize(std::span<std::byte> storage) noexcept
     storage_ = {};
     string_bytes_used_ = 0;
     node_count_ = 0;
+    error_ = {};
     valid_ = false;
 
     if (storage.empty()) {
@@ -50,10 +51,24 @@ bool Slab::valid() const noexcept
     return valid_;
 }
 
+Result<void> Slab::status() const noexcept
+{
+    if (error_.code != ErrorCode::Ok) {
+        return error_;
+    }
+    return {};
+}
+
+void Slab::clear_error() noexcept
+{
+    error_ = {};
+}
+
 void Slab::reset() noexcept
 {
     string_bytes_used_ = 0;
     node_count_ = 0;
+    clear_error();
     ++generation_;
     if (generation_ == 0) {
         generation_ = 1;
@@ -446,6 +461,14 @@ Object Slab::make_object_handle(NodeId id) noexcept
 Array Slab::make_array_handle(NodeId id) noexcept
 {
     return Array{this, id, generation_};
+}
+
+Error Slab::record_error(Error error) noexcept
+{
+    if (error_.code == ErrorCode::Ok) {
+        error_ = error;
+    }
+    return error_;
 }
 
 } // namespace slabjson

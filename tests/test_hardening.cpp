@@ -413,6 +413,7 @@ int main()
         CHECK(
             attached.error().code
             == slabjson::ErrorCode::AlreadyAttached);
+        slab.clear_error();
 
         slabjson::StaticSlab<256> other_slab;
         auto foreign = other_slab.make_null().value();
@@ -421,10 +422,12 @@ int main()
         CHECK(
             cross_slab.error().code
             == slabjson::ErrorCode::CrossSlab);
+        slab.clear_error();
 
         auto cycle = child.add(parent);
         CHECK(!cycle);
         CHECK(cycle.error().code == slabjson::ErrorCode::CycleDetected);
+        slab.clear_error();
 
         auto missing = parent.remove("missing");
         CHECK(!missing);

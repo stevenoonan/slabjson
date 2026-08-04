@@ -94,21 +94,23 @@ public:
     using const_iterator = ObjectIterator;
 
     [[nodiscard]] bool valid() const noexcept;
+    [[nodiscard]] Result<void> status() const noexcept;
+    void clear_error() noexcept;
 
-    [[nodiscard]] Result<void> add(std::string_view key, Value value) noexcept;
-    [[nodiscard]] Result<void> add(
+    Result<void> add(std::string_view key, Value value) noexcept;
+    Result<void> add(
         std::string_view key,
         std::string_view value) noexcept;
-    [[nodiscard]] Result<void> add(std::string_view key, const char* value) noexcept;
-    [[nodiscard]] Result<void> add(std::string_view key, bool value) noexcept;
-    [[nodiscard]] Result<void> add(std::string_view key, std::int64_t value) noexcept;
-    [[nodiscard]] Result<void> add(std::string_view key, std::uint64_t value) noexcept;
-    [[nodiscard]] Result<void> add(std::string_view key, double value) noexcept;
+    Result<void> add(std::string_view key, const char* value) noexcept;
+    Result<void> add(std::string_view key, bool value) noexcept;
+    Result<void> add(std::string_view key, std::int64_t value) noexcept;
+    Result<void> add(std::string_view key, std::uint64_t value) noexcept;
+    Result<void> add(std::string_view key, double value) noexcept;
 
     template <std::signed_integral T>
         requires (!std::same_as<std::remove_cv_t<T>, bool>
             && !std::same_as<std::remove_cv_t<T>, std::int64_t>)
-    [[nodiscard]] Result<void> add(std::string_view key, T value) noexcept
+    Result<void> add(std::string_view key, T value) noexcept
     {
         return add(key, static_cast<std::int64_t>(value));
     }
@@ -116,15 +118,15 @@ public:
     template <std::unsigned_integral T>
         requires (!std::same_as<std::remove_cv_t<T>, bool>
             && !std::same_as<std::remove_cv_t<T>, std::uint64_t>)
-    [[nodiscard]] Result<void> add(std::string_view key, T value) noexcept
+    Result<void> add(std::string_view key, T value) noexcept
     {
         return add(key, static_cast<std::uint64_t>(value));
     }
 
-    [[nodiscard]] Result<void> add_null(std::string_view key) noexcept;
+    Result<void> add_null(std::string_view key) noexcept;
 
-    [[nodiscard]] Result<Object> add_object(std::string_view key) noexcept;
-    [[nodiscard]] Result<Array> add_array(std::string_view key) noexcept;
+    Result<Object> add_object(std::string_view key) noexcept;
+    Result<Array> add_array(std::string_view key) noexcept;
 
     [[nodiscard]] std::optional<Value> find(std::string_view key) const noexcept;
     [[nodiscard]] bool contains(std::string_view key) const noexcept;
@@ -156,6 +158,7 @@ private:
     using NodeId = std::uint16_t;
 
     Object(Slab* slab, NodeId id, std::uint32_t generation) noexcept;
+    [[nodiscard]] Error record_error(Error error) noexcept;
 
     Slab* slab_{nullptr};
     NodeId id_{0};
@@ -171,19 +174,21 @@ public:
     using const_iterator = ArrayIterator;
 
     [[nodiscard]] bool valid() const noexcept;
+    [[nodiscard]] Result<void> status() const noexcept;
+    void clear_error() noexcept;
 
-    [[nodiscard]] Result<void> add(Value value) noexcept;
-    [[nodiscard]] Result<void> add(std::string_view value) noexcept;
-    [[nodiscard]] Result<void> add(const char* value) noexcept;
-    [[nodiscard]] Result<void> add(bool value) noexcept;
-    [[nodiscard]] Result<void> add(std::int64_t value) noexcept;
-    [[nodiscard]] Result<void> add(std::uint64_t value) noexcept;
-    [[nodiscard]] Result<void> add(double value) noexcept;
+    Result<void> add(Value value) noexcept;
+    Result<void> add(std::string_view value) noexcept;
+    Result<void> add(const char* value) noexcept;
+    Result<void> add(bool value) noexcept;
+    Result<void> add(std::int64_t value) noexcept;
+    Result<void> add(std::uint64_t value) noexcept;
+    Result<void> add(double value) noexcept;
 
     template <std::signed_integral T>
         requires (!std::same_as<std::remove_cv_t<T>, bool>
             && !std::same_as<std::remove_cv_t<T>, std::int64_t>)
-    [[nodiscard]] Result<void> add(T value) noexcept
+    Result<void> add(T value) noexcept
     {
         return add(static_cast<std::int64_t>(value));
     }
@@ -191,15 +196,15 @@ public:
     template <std::unsigned_integral T>
         requires (!std::same_as<std::remove_cv_t<T>, bool>
             && !std::same_as<std::remove_cv_t<T>, std::uint64_t>)
-    [[nodiscard]] Result<void> add(T value) noexcept
+    Result<void> add(T value) noexcept
     {
         return add(static_cast<std::uint64_t>(value));
     }
 
-    [[nodiscard]] Result<void> add_null() noexcept;
+    Result<void> add_null() noexcept;
 
-    [[nodiscard]] Result<Object> add_object() noexcept;
-    [[nodiscard]] Result<Array> add_array() noexcept;
+    Result<Object> add_object() noexcept;
+    Result<Array> add_array() noexcept;
 
     [[nodiscard]] std::optional<Value> at(std::size_t index) const noexcept;
 
@@ -215,6 +220,7 @@ private:
     using NodeId = std::uint16_t;
 
     Array(Slab* slab, NodeId id, std::uint32_t generation) noexcept;
+    [[nodiscard]] Error record_error(Error error) noexcept;
 
     Slab* slab_{nullptr};
     NodeId id_{0};

@@ -38,21 +38,49 @@ bool Object::valid() const noexcept
     return node != nullptr && node->type == ValueType::Object;
 }
 
-Result<void> Object::add(std::string_view key, Value child) noexcept
+Result<void> Object::status() const noexcept
 {
     if (slab_ == nullptr) {
         return Error{ErrorCode::InvalidHandle, 0};
+    }
+    auto slab_status = slab_->status();
+    if (!slab_status) {
+        return slab_status.error();
+    }
+    if (!valid()) {
+        return Error{ErrorCode::InvalidHandle, 0};
+    }
+    return {};
+}
+
+void Object::clear_error() noexcept
+{
+    if (slab_ != nullptr) {
+        slab_->clear_error();
+    }
+}
+
+Error Object::record_error(Error error) noexcept
+{
+    return slab_ == nullptr ? error : slab_->record_error(error);
+}
+
+Result<void> Object::add(std::string_view key, Value child) noexcept
+{
+    auto current = status();
+    if (!current) {
+        return record_error(current.error());
     }
 
     auto validation =
         slab_->validate_attachment(id_, generation_, child, ValueType::Object);
     if (!validation) {
-        return validation.error();
+        return record_error(validation.error());
     }
 
     auto key_result = slab_->store_string_with_flags(key);
     if (!key_result) {
-        return key_result.error();
+        return record_error(key_result.error());
     }
 
     auto* child_node = slab_->node_for(child.id_, child.generation_);
@@ -66,14 +94,15 @@ Result<void> Object::add(
     std::string_view key,
     std::string_view string_value) noexcept
 {
-    if (!valid()) {
-        return Error{ErrorCode::InvalidHandle, 0};
+    auto current = status();
+    if (!current) {
+        return record_error(current.error());
     }
 
     const auto checkpoint = slab_->checkpoint();
     auto value_result = slab_->make_string(string_value);
     if (!value_result) {
-        return value_result.error();
+        return record_error(value_result.error());
     }
 
     auto add_result = add(key, value_result.value());
@@ -86,22 +115,27 @@ Result<void> Object::add(
 
 Result<void> Object::add(std::string_view key, const char* string_value) noexcept
 {
+    auto current = status();
+    if (!current) {
+        return record_error(current.error());
+    }
     if (string_value == nullptr) {
-        return Error{ErrorCode::InvalidArgument, 0};
+        return record_error(Error{ErrorCode::InvalidArgument, 0});
     }
     return add(key, std::string_view{string_value});
 }
 
 Result<void> Object::add(std::string_view key, bool bool_value) noexcept
 {
-    if (!valid()) {
-        return Error{ErrorCode::InvalidHandle, 0};
+    auto current = status();
+    if (!current) {
+        return record_error(current.error());
     }
 
     const auto checkpoint = slab_->checkpoint();
     auto value_result = slab_->make_bool(bool_value);
     if (!value_result) {
-        return value_result.error();
+        return record_error(value_result.error());
     }
 
     auto add_result = add(key, value_result.value());
@@ -114,14 +148,15 @@ Result<void> Object::add(std::string_view key, bool bool_value) noexcept
 
 Result<void> Object::add(std::string_view key, std::int64_t number_value) noexcept
 {
-    if (!valid()) {
-        return Error{ErrorCode::InvalidHandle, 0};
+    auto current = status();
+    if (!current) {
+        return record_error(current.error());
     }
 
     const auto checkpoint = slab_->checkpoint();
     auto value_result = slab_->make_number(number_value);
     if (!value_result) {
-        return value_result.error();
+        return record_error(value_result.error());
     }
 
     auto add_result = add(key, value_result.value());
@@ -134,14 +169,15 @@ Result<void> Object::add(std::string_view key, std::int64_t number_value) noexce
 
 Result<void> Object::add(std::string_view key, std::uint64_t number_value) noexcept
 {
-    if (!valid()) {
-        return Error{ErrorCode::InvalidHandle, 0};
+    auto current = status();
+    if (!current) {
+        return record_error(current.error());
     }
 
     const auto checkpoint = slab_->checkpoint();
     auto value_result = slab_->make_number(number_value);
     if (!value_result) {
-        return value_result.error();
+        return record_error(value_result.error());
     }
 
     auto add_result = add(key, value_result.value());
@@ -154,14 +190,15 @@ Result<void> Object::add(std::string_view key, std::uint64_t number_value) noexc
 
 Result<void> Object::add(std::string_view key, double number_value) noexcept
 {
-    if (!valid()) {
-        return Error{ErrorCode::InvalidHandle, 0};
+    auto current = status();
+    if (!current) {
+        return record_error(current.error());
     }
 
     const auto checkpoint = slab_->checkpoint();
     auto value_result = slab_->make_number(number_value);
     if (!value_result) {
-        return value_result.error();
+        return record_error(value_result.error());
     }
 
     auto add_result = add(key, value_result.value());
@@ -174,14 +211,15 @@ Result<void> Object::add(std::string_view key, double number_value) noexcept
 
 Result<void> Object::add_null(std::string_view key) noexcept
 {
-    if (!valid()) {
-        return Error{ErrorCode::InvalidHandle, 0};
+    auto current = status();
+    if (!current) {
+        return record_error(current.error());
     }
 
     const auto checkpoint = slab_->checkpoint();
     auto value_result = slab_->make_null();
     if (!value_result) {
-        return value_result.error();
+        return record_error(value_result.error());
     }
 
     auto add_result = add(key, value_result.value());
@@ -194,14 +232,15 @@ Result<void> Object::add_null(std::string_view key) noexcept
 
 Result<Object> Object::add_object(std::string_view key) noexcept
 {
-    if (!valid()) {
-        return Error{ErrorCode::InvalidHandle, 0};
+    auto current = status();
+    if (!current) {
+        return record_error(current.error());
     }
 
     const auto checkpoint = slab_->checkpoint();
     auto object_result = slab_->make_object();
     if (!object_result) {
-        return object_result.error();
+        return record_error(object_result.error());
     }
 
     Object object = object_result.value();
@@ -215,14 +254,15 @@ Result<Object> Object::add_object(std::string_view key) noexcept
 
 Result<Array> Object::add_array(std::string_view key) noexcept
 {
-    if (!valid()) {
-        return Error{ErrorCode::InvalidHandle, 0};
+    auto current = status();
+    if (!current) {
+        return record_error(current.error());
     }
 
     const auto checkpoint = slab_->checkpoint();
     auto array_result = slab_->make_array();
     if (!array_result) {
-        return array_result.error();
+        return record_error(array_result.error());
     }
 
     Array array = array_result.value();
