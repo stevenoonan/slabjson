@@ -80,14 +80,17 @@ int main()
         auto already_attached = second_array.add(detached);
         CHECK(!already_attached);
         CHECK(already_attached.error().code == slabjson::ErrorCode::AlreadyAttached);
+        slab.clear_error();
 
         auto self_cycle = second_array.add(second_array.value());
         CHECK(!self_cycle);
         CHECK(self_cycle.error().code == slabjson::ErrorCode::CycleDetected);
+        slab.clear_error();
 
         auto ancestor_cycle = nested.add(array.value());
         CHECK(!ancestor_cycle);
         CHECK(ancestor_cycle.error().code == slabjson::ErrorCode::CycleDetected);
+        slab.clear_error();
 
         slabjson::StaticSlab<256> other_slab;
         auto foreign_result = other_slab.make_bool(false);
@@ -95,6 +98,7 @@ int main()
         auto foreign = array.add(foreign_result.value());
         CHECK(!foreign);
         CHECK(foreign.error().code == slabjson::ErrorCode::CrossSlab);
+        slab.clear_error();
 
         auto null_string = array.add(static_cast<const char*>(nullptr));
         CHECK(!null_string);

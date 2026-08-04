@@ -165,6 +165,7 @@ int main()
         auto already_attached = second_parent.add("again", detached);
         CHECK(!already_attached);
         CHECK(already_attached.error().code == slabjson::ErrorCode::AlreadyAttached);
+        slab.clear_error();
         CHECK(root.remove("detached"));
         CHECK(second_parent.add("moved", detached));
         CHECK(second_parent.find("moved")->as_string().value_or("") == "detached");
@@ -175,10 +176,12 @@ int main()
         auto foreign = root.add("foreign", foreign_result.value());
         CHECK(!foreign);
         CHECK(foreign.error().code == slabjson::ErrorCode::CrossSlab);
+        slab.clear_error();
 
         auto cycle = nested.add("root", root.value());
         CHECK(!cycle);
         CHECK(cycle.error().code == slabjson::ErrorCode::CycleDetected);
+        slab.clear_error();
 
         auto null_string = root.add("bad", static_cast<const char*>(nullptr));
         CHECK(!null_string);
@@ -194,6 +197,52 @@ int main()
         auto stale_add = root.add("value", true);
         CHECK(!stale_add);
         CHECK(stale_add.error().code == slabjson::ErrorCode::InvalidHandle);
+    }
+
+    {
+        slabjson::StaticSlab<1024> slab;
+        auto root = slab.make_object().value();
+        auto items = root.add_array("items").value();
+
+        root.add("device_id", "widget-123");
+        CHECK(root.status());
+        CHECK(slab.status());
+
+        root.add("bad", static_cast<const char*>(nullptr));
+        const std::size_t used_after_error = slab.used_bytes();
+        const std::size_t root_size_after_error = root.size();
+
+        auto skipped = root.add("skipped", 42);
+        items.add("also skipped");
+
+        auto root_status = root.status();
+        auto items_status = items.status();
+        auto slab_status = slab.status();
+        CHECK(!root_status);
+        CHECK(!items_status);
+        CHECK(!slab_status);
+        CHECK(root_status.error().code == slabjson::ErrorCode::InvalidArgument);
+        CHECK(items_status.error().code == slabjson::ErrorCode::InvalidArgument);
+        CHECK(slab_status.error().code == slabjson::ErrorCode::InvalidArgument);
+        CHECK(!skipped);
+        CHECK(skipped.error().code == slabjson::ErrorCode::InvalidArgument);
+        CHECK(slab.used_bytes() == used_after_error);
+        CHECK(root.size() == root_size_after_error);
+        CHECK(!root.contains("skipped"));
+        CHECK(items.empty());
+
+        items.clear_error();
+        CHECK(root.status());
+        CHECK(items.status());
+        CHECK(root.add("recovered", true));
+        CHECK(root.contains("recovered"));
+
+        root.add("bad", static_cast<const char*>(nullptr));
+        CHECK(!slab.status());
+        slab.reset();
+        CHECK(slab.status());
+        CHECK(!root.status());
+        CHECK(root.status().error().code == slabjson::ErrorCode::InvalidHandle);
     }
 
     {

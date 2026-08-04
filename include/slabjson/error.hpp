@@ -18,9 +18,7 @@ enum class ErrorCode : std::uint8_t {
     NonFiniteNumber,
 
     OutOfMemory,
-    NodeCapacityExceeded,
     StringCapacityExceeded,
-    MemberCapacityExceeded,
     ParserDepthExceeded,
     OutputCapacityExceeded,
 

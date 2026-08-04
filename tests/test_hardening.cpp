@@ -92,6 +92,13 @@ void check_serializes(
     check_serializes((value), (expected), __LINE__)
 
 template <typename T>
+void self_copy_assign(T& value)
+{
+    const T* alias = &value;
+    value = *alias;
+}
+
+template <typename T>
 void self_move_assign(T& value)
 {
     T* alias = &value;
@@ -134,7 +141,7 @@ int main()
         error = std::move(moved_error);
         CHECK(!error && error.error().offset == 5);
 
-        other_value = other_value;
+        self_copy_assign(other_value);
         CHECK(other_value && other_value.value() == 2);
         self_move_assign(other_value);
         CHECK(other_value && other_value.value() == 2);
@@ -406,6 +413,7 @@ int main()
         CHECK(
             attached.error().code
             == slabjson::ErrorCode::AlreadyAttached);
+        slab.clear_error();
 
         slabjson::StaticSlab<256> other_slab;
         auto foreign = other_slab.make_null().value();
@@ -414,10 +422,12 @@ int main()
         CHECK(
             cross_slab.error().code
             == slabjson::ErrorCode::CrossSlab);
+        slab.clear_error();
 
         auto cycle = child.add(parent);
         CHECK(!cycle);
         CHECK(cycle.error().code == slabjson::ErrorCode::CycleDetected);
+        slab.clear_error();
 
         auto missing = parent.remove("missing");
         CHECK(!missing);

@@ -30,6 +30,8 @@ public:
     Slab& operator=(Slab&&) = delete;
 
     [[nodiscard]] bool valid() const noexcept;
+    [[nodiscard]] Result<void> status() const noexcept;
+    void clear_error() noexcept;
     void reset() noexcept;
 
     [[nodiscard]] std::size_t used_bytes() const noexcept;
@@ -123,7 +125,6 @@ private:
         ValueType type) noexcept;
     [[nodiscard]] Result<StringRef> allocate_string(
         std::size_t length) noexcept;
-    [[nodiscard]] Result<StringRef> store_string(std::string_view value) noexcept;
     [[nodiscard]] Result<StoredString> store_string_with_flags(
         std::string_view value) noexcept;
     [[nodiscard]] Result<StringRef> copy_string_trusted(
@@ -152,11 +153,13 @@ private:
     [[nodiscard]] Value make_value(NodeId id) noexcept;
     [[nodiscard]] Object make_object_handle(NodeId id) noexcept;
     [[nodiscard]] Array make_array_handle(NodeId id) noexcept;
+    [[nodiscard]] Error record_error(Error error) noexcept;
 
     std::span<std::byte> storage_{};
     std::size_t string_bytes_used_{0};
     NodeId node_count_{0};
     std::uint32_t generation_{1};
+    Error error_{};
     bool valid_{false};
 
     friend class Array;
