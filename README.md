@@ -47,26 +47,12 @@ It is especially suitable for:
 * cJSON-style compatibility helpers
 * Allocation-free host test suite and JSONTestSuite conformance runner
 
-## Non-goals
-
-SlabJson is not trying to be a general-purpose desktop JSON library. It intentionally avoids features that would compromise deterministic memory behavior.
-
-SlabJson does not currently aim to provide:
-
-* automatic heap growth in the core library
-* exception-based error handling
-* recursive traversal proportional to document depth
-* arbitrary-size JSON documents
-* schema validation
-* reflection-based struct serialization
-
-The cJSON compatibility layer is intended as a migration helper, not as a binary-compatible cJSON clone.
-
 ## Quick start
 
 ```cpp
 #include <array>
 #include <cstddef>
+#include <span>
 #include <slabjson/slabjson.hpp>
 
 int main()
@@ -87,11 +73,13 @@ int main()
     }
 
     auto tags_result = root.add_array("tags");
-    if (tags_result) {
-        auto tags = tags_result.value();
-        if (!tags.add("widget") || !tags.add("production")) {
-            return 1;
-        }
+    if (!tags_result) {
+        return 1;
+    }
+
+    auto tags = tags_result.value();
+    if (!tags.add("widget") || !tags.add("production")) {
+        return 1;
     }
 
     std::array<char, 512> output{};
@@ -270,17 +258,34 @@ struct Error {
 SlabJson includes a cJSON-style namespace for migration-oriented code:
 
 ```cpp
+#include <array>
 #include <slabjson/cjson_compat.hpp>
+#include <slabjson/static_slab.hpp>
 
-slabjson::StaticSlab<4096> slab;
+int main()
+{
+    slabjson::StaticSlab<4096> slab;
 
-auto root = slabjson::cjson::create_object(slab).value();
-auto name = slabjson::cjson::create_string(slab, "widget-123").value();
+    auto root_result = slabjson::cjson::create_object(slab);
+    auto name_result = slabjson::cjson::create_string(slab, "widget-123");
+    if (!root_result || !name_result) {
+        return 1;
+    }
 
-slabjson::cjson::add_item_to_object(root, "device_id", name);
+    auto root = root_result.value();
+    auto name = name_result.value();
+    if (!slabjson::cjson::add_item_to_object(root, "device_id", name)) {
+        return 1;
+    }
 
-std::array<char, 512> output{};
-auto written = slabjson::cjson::print_unformatted(root, output);
+    std::array<char, 512> output{};
+    auto written = slabjson::cjson::print_unformatted(root, output);
+    if (!written) {
+        return 1;
+    }
+
+    return 0;
+}
 ```
 
 Important difference from cJSON: SlabJson allocation is reclaimed at the slab level. Use:

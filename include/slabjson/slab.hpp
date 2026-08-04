@@ -123,7 +123,6 @@ private:
         ValueType type) noexcept;
     [[nodiscard]] Result<StringRef> allocate_string(
         std::size_t length) noexcept;
-    [[nodiscard]] Result<StringRef> store_string(std::string_view value) noexcept;
     [[nodiscard]] Result<StoredString> store_string_with_flags(
         std::string_view value) noexcept;
     [[nodiscard]] Result<StringRef> copy_string_trusted(

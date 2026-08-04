@@ -154,9 +154,6 @@ Result<Value> Slab::make_string(std::string_view value) noexcept
         return Error{ErrorCode::InvalidUtf8, *invalid};
     }
     if (!can_allocate_node()) {
-        if (node_count_ == kInvalidNodeId) {
-            return Error{ErrorCode::NodeCapacityExceeded, 0};
-        }
         return Error{ErrorCode::OutOfMemory, 0};
     }
 
@@ -217,9 +214,6 @@ Result<Slab::NodeAllocation> Slab::allocate_node_with_pointer(
     if (!valid_) {
         return Error{ErrorCode::InvalidArgument, 0};
     }
-    if (node_count_ == kInvalidNodeId) {
-        return Error{ErrorCode::NodeCapacityExceeded, 0};
-    }
     if (!can_allocate_node()) {
         return Error{ErrorCode::OutOfMemory, 0};
     }
@@ -230,15 +224,6 @@ Result<Slab::NodeAllocation> Slab::allocate_node_with_pointer(
     node->type = type;
     ++node_count_;
     return NodeAllocation{id, node};
-}
-
-Result<Slab::StringRef> Slab::store_string(std::string_view value) noexcept
-{
-    auto stored = store_string_with_flags(value);
-    if (!stored) {
-        return stored.error();
-    }
-    return stored.value().ref;
 }
 
 Result<Slab::StoredString> Slab::store_string_with_flags(
@@ -297,7 +282,7 @@ Result<Slab::StringRef> Slab::allocate_string(std::size_t length) noexcept
 
 bool Slab::can_allocate_node() const noexcept
 {
-    if (!valid_ || node_count_ == kInvalidNodeId) {
+    if (!valid_) {
         return false;
     }
 
@@ -310,8 +295,9 @@ std::uint8_t Slab::string_flags(std::string_view value) noexcept
 {
     static constexpr std::uint8_t kNeedsJsonEscape = 0x01;
 
-    for (unsigned char character : value) {
-        if (character == '"' || character == '\\' || character < 0x20) {
+    for (char character : value) {
+        const auto byte = static_cast<unsigned char>(character);
+        if (byte == '"' || byte == '\\' || byte < 0x20) {
             return kNeedsJsonEscape;
         }
     }

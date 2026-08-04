@@ -356,9 +356,7 @@ bool validate_document(
 bool is_capacity_error(ErrorCode code) noexcept
 {
     return code == ErrorCode::OutOfMemory
-        || code == ErrorCode::NodeCapacityExceeded
-        || code == ErrorCode::StringCapacityExceeded
-        || code == ErrorCode::MemberCapacityExceeded;
+        || code == ErrorCode::StringCapacityExceeded;
 }
 
 } // namespace slabjson::benchmarking
