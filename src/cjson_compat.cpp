@@ -610,7 +610,7 @@ Result<std::size_t> print_unformatted(
         return capacity_result.error();
     }
 
-    auto result = serialize_partial(item, output.first(size_result.value()));
+    auto result = serialize_partial(item, output.first(size_result.value() + 1));
     if (!result) {
         return result.error();
     }
@@ -636,7 +636,7 @@ Result<std::size_t> print_pretty(
 
     auto result = serialize_pretty_partial(
         item,
-        output.first(size_result.value()),
+        output.first(size_result.value() + 1),
         indent_spaces);
     if (!result) {
         return result.error();

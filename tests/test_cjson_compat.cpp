@@ -29,6 +29,40 @@ int main()
 {
     namespace cjson = slabjson::cjson;
 
+    for (bool formatted : {false, true}) {
+        for (bool preallocated : {false, true}) {
+            alignas(std::max_align_t) std::array<std::byte, 256> storage{};
+            slabjson::Slab slab{std::span{storage}.subspan(16)};
+            auto value = cjson::create_true(slab).value();
+            const auto before = storage;
+
+            // Only the terminating NUL would overlap the first slab byte.
+            auto overlapping = std::span<char>{
+                reinterpret_cast<char*>(storage.data()) + 12, 5};
+            auto rejected = preallocated
+                ? cjson::print_preallocated(value, overlapping, formatted)
+                : formatted ? cjson::print_pretty(value, overlapping)
+                            : cjson::print_unformatted(value, overlapping);
+            CHECK(!rejected);
+            if (!rejected) {
+                CHECK(rejected.error().code == slabjson::ErrorCode::InvalidArgument);
+            }
+            CHECK(storage == before);
+            CHECK(value.as_bool() == true);
+
+            // A terminator immediately before the slab is safe.
+            auto adjacent = std::span<char>{
+                reinterpret_cast<char*>(storage.data()) + 11, 5};
+            auto accepted = preallocated
+                ? cjson::print_preallocated(value, adjacent, formatted)
+                : formatted ? cjson::print_pretty(value, adjacent)
+                            : cjson::print_unformatted(value, adjacent);
+            CHECK(accepted);
+            CHECK((std::string_view{adjacent.data(), 5} == std::string_view{"true\0", 5}));
+            CHECK(value.as_bool() == true);
+        }
+    }
+
     {
         slabjson::StaticSlab<8192> slab;
 
