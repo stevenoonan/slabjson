@@ -17,6 +17,8 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   containing object, array, or slab status.
 - Parsing and programmatic string construction share UTF-8 sequence validation
   while preserving their error codes and byte offsets.
+- Object and array construction share status, allocation, attachment, and
+  rollback handling through a private helper.
 
 ### Fixed
 
