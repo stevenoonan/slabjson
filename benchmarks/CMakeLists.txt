@@ -169,6 +169,14 @@ add_test(
         ${CMAKE_CURRENT_BINARY_DIR}/memory-smoke.csv
 )
 
+add_test(
+    NAME slabjson.benchmark.memory_failures
+    COMMAND
+        ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_memory_report.py
+        $<TARGET_FILE:slabjson_memory_report>
+)
+
 foreach(family
     ParseLifecycle
     SerializedSize

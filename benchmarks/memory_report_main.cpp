@@ -436,13 +436,20 @@ int main(int argc, char** argv)
 {
     try {
         std::filesystem::path output_path;
+        std::filesystem::path corpus_manifest;
+        std::filesystem::path capacity_manifest;
         for (int index = 1; index < argc; ++index) {
             const std::string_view argument{argv[index]};
             if (argument == "--output" && index + 1 < argc) {
                 output_path = argv[++index];
+            } else if (argument == "--corpus-manifest" && index + 1 < argc) {
+                corpus_manifest = argv[++index];
+            } else if (argument == "--capacity-manifest" && index + 1 < argc) {
+                capacity_manifest = argv[++index];
             } else {
                 throw std::runtime_error(
-                    "usage: slabjson_memory_report [--output PATH]");
+                    "usage: slabjson_memory_report [--output PATH] "
+                    "[--corpus-manifest PATH] [--capacity-manifest PATH]");
             }
         }
 
@@ -454,22 +461,45 @@ int main(int argc, char** argv)
 
         std::vector<Row> rows;
         bool balanced = true;
-        for (const auto& document : sb::load_corpus()) {
+        for (const auto& document : sb::load_corpus(corpus_manifest)) {
             add_slab_rows(document, rows);
             balanced = add_cjson_rows(document, rows) && balanced;
         }
 
-        for (const auto& document : sb::load_capacity_documents()) {
+        bool success = true;
+        for (const Row& row : rows) {
+            if (!row.success) {
+                success = false;
+                std::cerr << "memory measurement failed: "
+                          << row.implementation << '/' << row.corpus << '/'
+                          << row.variant << '/' << row.operation << '\n';
+            }
+        }
+
+        for (const auto& document : sb::load_capacity_documents(capacity_manifest)) {
+            const std::string input = sb::read_file(document.path);
+            slabjson::StaticSlab<sb::kSlabCapacity> slab;
+            auto parsed = slabjson::parse(slab, input);
+            const bool expected_capacity_failure =
+                input.size() == document.input_bytes
+                && !parsed
+                && sb::is_capacity_error(parsed.error().code)
+                && slab.used_bytes() == 0;
+            if (!expected_capacity_failure) {
+                success = false;
+                std::cerr << "unexpected capacity-check result: "
+                          << document.name << '\n';
+            }
             rows.push_back(Row{
                 "SlabJson",
                 document.name,
                 "canonical",
                 "capacity_check",
-                document.input_bytes,
+                input.size(),
                 0,
-                false,
-                0,
-                sb::kSlabCapacity,
+                static_cast<bool>(parsed),
+                slab.used_bytes(),
+                slab.capacity_bytes(),
                 0,
                 0,
                 0,
@@ -493,7 +523,7 @@ int main(int argc, char** argv)
             std::cerr << "cJSON allocation hooks detected an imbalance\n";
             return 1;
         }
-        return 0;
+        return success ? 0 : 1;
     } catch (const std::exception& exception) {
         cJSON_InitHooks(nullptr);
         std::cerr << "memory report failed: "

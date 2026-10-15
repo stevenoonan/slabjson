@@ -35,8 +35,10 @@ struct CjsonDeleter {
 
 using CjsonPtr = std::unique_ptr<cJSON, CjsonDeleter>;
 
-[[nodiscard]] std::vector<CorpusDocument> load_corpus();
-[[nodiscard]] std::vector<CapacityDocument> load_capacity_documents();
+[[nodiscard]] std::vector<CorpusDocument> load_corpus(
+    const std::filesystem::path& manifest = {});
+[[nodiscard]] std::vector<CapacityDocument> load_capacity_documents(
+    const std::filesystem::path& manifest = {});
 [[nodiscard]] std::string read_file(const std::filesystem::path& path);
 
 [[nodiscard]] CjsonPtr parse_cjson_full(std::string_view input) noexcept;
