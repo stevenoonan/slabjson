@@ -126,11 +126,12 @@ std::string read_file(const std::filesystem::path& path)
     return result;
 }
 
-std::vector<CorpusDocument> load_corpus()
+std::vector<CorpusDocument> load_corpus(
+    const std::filesystem::path& manifest_path)
 {
-    const std::filesystem::path manifest{
-        SLABJSON_BENCHMARK_CORPUS_MANIFEST,
-    };
+    const std::filesystem::path manifest = manifest_path.empty()
+        ? std::filesystem::path{SLABJSON_BENCHMARK_CORPUS_MANIFEST}
+        : manifest_path;
     auto lines = read_manifest_lines(manifest);
     if (lines.empty()
         || lines.front() != "profile\tvariant\tpath\tinput_bytes") {
@@ -162,11 +163,12 @@ std::vector<CorpusDocument> load_corpus()
     return documents;
 }
 
-std::vector<CapacityDocument> load_capacity_documents()
+std::vector<CapacityDocument> load_capacity_documents(
+    const std::filesystem::path& manifest_path)
 {
-    const std::filesystem::path manifest{
-        SLABJSON_BENCHMARK_CAPACITY_MANIFEST,
-    };
+    const std::filesystem::path manifest = manifest_path.empty()
+        ? std::filesystem::path{SLABJSON_BENCHMARK_CAPACITY_MANIFEST}
+        : manifest_path;
     auto lines = read_manifest_lines(manifest);
     if (lines.empty()
         || lines.front() != "name\tpath\tinput_bytes") {
