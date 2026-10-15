@@ -42,16 +42,7 @@ if(NOT WIN32)
     target_link_libraries(slabjson_benchmark_cjson PUBLIC m)
 endif()
 
-FetchContent_Declare(
-    json_test_suite
-    GIT_REPOSITORY https://github.com/nst/JSONTestSuite.git
-    GIT_TAG 1ef36fa01286573e846ac449e8683f8833c5b26a
-    GIT_SUBMODULES ""
-)
-FetchContent_GetProperties(json_test_suite)
-if(NOT json_test_suite_POPULATED)
-    FetchContent_Populate(json_test_suite)
-endif()
+include("${PROJECT_SOURCE_DIR}/cmake/JsonTestSuite.cmake")
 
 FetchContent_Declare(
     nativejson_benchmark
@@ -110,7 +101,7 @@ target_compile_definitions(slabjson_benchmark_support
     PUBLIC
         SLABJSON_BENCHMARK_CORPUS_MANIFEST="${SLABJSON_CORPUS_MANIFEST}"
         SLABJSON_BENCHMARK_CAPACITY_MANIFEST="${SLABJSON_CAPACITY_MANIFEST}"
-        SLABJSON_JSON_TEST_SUITE_DIR="${json_test_suite_SOURCE_DIR}/test_parsing"
+        SLABJSON_JSON_TEST_SUITE_DIR="${SLABJSON_JSON_TEST_SUITE_DIR}"
 )
 add_dependencies(
     slabjson_benchmark_support
