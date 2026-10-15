@@ -20,6 +20,8 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - cJSON printing checks the terminating NUL for slab overlap before writing,
   preventing corruption when the output buffer immediately precedes the slab.
+- Floating-point negative zero serializes as `-0.0`, preserving its sign and
+  floating-point representation when parsed again.
 
 ## [0.9.0] - 2026-08-03
 

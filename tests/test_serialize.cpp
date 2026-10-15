@@ -1,4 +1,5 @@
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
@@ -72,6 +73,55 @@ void check_serializes(
 
 int main()
 {
+    {
+        slabjson::StaticSlab<1024> slab;
+        auto negative_zero = slab.make_number(-0.0).value();
+        CHECK_SERIALIZES(negative_zero, "-0.0");
+        CHECK_SERIALIZES(slab.make_number(0.0).value(), "0");
+        CHECK_SERIALIZES(slab.make_number(0).value(), "0");
+
+        for (bool pretty : {false, true}) {
+            auto measured = pretty
+                ? slabjson::serialized_size_pretty(negative_zero)
+                : slabjson::serialized_size(negative_zero);
+            CHECK(measured && measured.value() == 4);
+            for (bool partial : {false, true}) {
+                std::array<char, 4> output{};
+                auto written = pretty
+                    ? partial ? slabjson::serialize_pretty_partial(negative_zero, output)
+                              : slabjson::serialize_pretty(negative_zero, output)
+                    : partial ? slabjson::serialize_partial(negative_zero, output)
+                              : slabjson::serialize(negative_zero, output);
+                CHECK(written && written.value() == output.size());
+                auto reparsed = slabjson::parse(slab, {output.data(), output.size()});
+                CHECK(reparsed);
+                if (reparsed) {
+                    CHECK(reparsed.value().number_kind() == slabjson::NumberKind::FloatingPoint);
+                    auto number = reparsed.value().as_number();
+                    CHECK(number && *number == 0.0 && std::signbit(*number));
+                }
+            }
+
+            std::array<char, 3> too_small{'#', '#', '#'};
+            auto rejected = pretty
+                ? slabjson::serialize_pretty(negative_zero, too_small)
+                : slabjson::serialize(negative_zero, too_small);
+            CHECK(!rejected);
+            if (!rejected) {
+                CHECK(rejected.error().code == slabjson::ErrorCode::OutputCapacityExceeded);
+            }
+            CHECK((too_small == std::array<char, 3>{'#', '#', '#'}));
+        }
+
+        for (std::string_view input : {"-0.0", "-0e0", "-0.00e+10"}) {
+            auto parsed = slabjson::parse(slab, input);
+            CHECK(parsed);
+            if (parsed) {
+                CHECK_SERIALIZES(parsed.value(), "-0.0");
+            }
+        }
+    }
+
     {
         slabjson::StaticSlab<2048> slab;
 

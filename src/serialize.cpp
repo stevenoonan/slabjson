@@ -410,6 +410,13 @@ private:
             if (!std::isfinite(node.payload.floating_point)) {
                 return Error{ErrorCode::NonFiniteNumber, 0};
             }
+            if (node.payload.floating_point == 0.0
+                && std::signbit(node.payload.floating_point)) {
+                if (!writer.append("-0.0")) {
+                    return Error{ErrorCode::OutputCapacityExceeded, 0};
+                }
+                return {};
+            }
             result = std::to_chars(
                 buffer,
                 buffer + sizeof(buffer),
