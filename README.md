@@ -45,7 +45,7 @@ It is especially suitable for:
 * Single-pass partial serialization API
 * Compact and pretty serialization
 * cJSON-style compatibility helpers
-* Allocation-free host test suite and JSONTestSuite conformance runner
+* Allocation guard tests, JSONTestSuite conformance, and sanitizer fuzzing
 
 ## Quick start
 
@@ -417,6 +417,8 @@ python3 benchmarks/show_timing_report.py
 | ---------------------------- | ------: | ------------------------------------------------- |
 | `SLABJSON_BUILD_TESTS`       | Top-level only | Build unit and consumer tests                |
 | `SLABJSON_BUILD_BENCHMARKS`  |   `OFF` | Build host benchmark suite                        |
+| `SLABJSON_BUILD_CONFORMANCE` |  `OFF` | Build standalone JSONTestSuite conformance         |
+| `SLABJSON_BUILD_FUZZERS`     |   `OFF` | Build Clang libFuzzer targets with sanitizers      |
 | `SLABJSON_ENABLE_EXCEPTIONS` |   `OFF` | Allow exceptions; core code does not require them |
 | `SLABJSON_ENABLE_LTO`        |   `OFF` | Enable CMake IPO/LTO when supported               |
 

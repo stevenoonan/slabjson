@@ -7,6 +7,48 @@ permissions:
   contents: read
 
 jobs:
+  conformance:
+    name: Linux / JSONTestSuite conformance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Configure standalone conformance
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DSLABJSON_BUILD_TESTS=OFF
+          -DSLABJSON_BUILD_CONFORMANCE=ON
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  fuzz:
+    name: Linux / Clang / bounded fuzzing
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CC: clang
+      CXX: clang++
+      ASAN_OPTIONS: detect_leaks=0
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Configure fuzz target
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DSLABJSON_BUILD_TESTS=OFF
+          -DSLABJSON_BUILD_FUZZERS=ON
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Fuzz parse, serialize, and duplicate contracts
+        run: |
+          cp -R fuzz/corpus build/fuzz-corpus
+          build/fuzz/slabjson_fuzz build/fuzz-corpus \
+            -max_total_time=30 -max_len=8192 -timeout=5 -rss_limit_mb=1024
+
   build-test:
     name: ${{ matrix.platform }} / ${{ matrix.compiler }} / ${{ matrix.build_type }}
     strategy:
