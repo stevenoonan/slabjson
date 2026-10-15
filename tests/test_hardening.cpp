@@ -357,15 +357,27 @@ int main()
         CHECK(bad_value.error().offset == 1);
         CHECK(slab.used_bytes() == used_before);
 
+        object.clear_error();
+        CHECK(object.status());
         auto child = slab.make_null().value();
         const std::size_t child_used = slab.used_bytes();
         auto bad_key = object.add(
             std::string_view{invalid_bytes, sizeof(invalid_bytes)},
             child);
         CHECK(!bad_key);
-        CHECK(bad_key.error().code == slabjson::ErrorCode::InvalidUtf8);
-        CHECK(bad_key.error().offset == 1);
+        if (!bad_key) {
+            CHECK(bad_key.error().code == slabjson::ErrorCode::InvalidUtf8);
+            CHECK(bad_key.error().offset == 1);
+        }
         CHECK(slab.used_bytes() == child_used);
+        CHECK(object.empty());
+        CHECK(child.valid());
+        CHECK(!object.status());
+
+        object.clear_error();
+        CHECK(object.add("recovered", child));
+        auto recovered = object.find("recovered");
+        CHECK(recovered && recovered->is_null());
 
         const char valid_with_nul[] = {'a', '\0', 'b'};
         auto valid = slab.make_string(

@@ -26,6 +26,8 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   capacity checks instead of reporting hardcoded results.
 - Installed-consumer tests honor configured library, header, and documentation
   directories and verify archives through the imported CMake target.
+- Invalid-UTF-8 object-key coverage clears the earlier sticky value error,
+  verifies rollback, and checks that the rejected child can be attached again.
 
 ## [0.9.0] - 2026-08-03
 
