@@ -15,6 +15,8 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Addition results may be intentionally deferred and checked once through the
   containing object, array, or slab status.
+- Parsing and programmatic string construction share UTF-8 sequence validation
+  while preserving their error codes and byte offsets.
 
 ### Fixed
 
