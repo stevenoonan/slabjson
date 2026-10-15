@@ -78,14 +78,14 @@ add_test(NAME slabjson.consumer.fetchcontent
 add_test(NAME slabjson.release.valid
     COMMAND "${CMAKE_COMMAND}"
         "-DSLABJSON_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
-        -DSLABJSON_TAG=v0.9.0
+        -DSLABJSON_TAG=v0.9.1
         -P "${PROJECT_SOURCE_DIR}/cmake/ValidateRelease.cmake"
 )
 
 add_test(NAME slabjson.release.rejects_invalid_tag
     COMMAND "${CMAKE_COMMAND}"
         "-DSLABJSON_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
-        -DSLABJSON_TAG=release-0.9.0
+        -DSLABJSON_TAG=release-0.9.1
         -P "${PROJECT_SOURCE_DIR}/cmake/ValidateRelease.cmake"
 )
 set_tests_properties(slabjson.release.rejects_invalid_tag PROPERTIES
@@ -95,7 +95,7 @@ set_tests_properties(slabjson.release.rejects_invalid_tag PROPERTIES
 add_test(NAME slabjson.release.rejects_project_version_mismatch
     COMMAND "${CMAKE_COMMAND}"
         "-DSLABJSON_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
-        -DSLABJSON_TAG=v0.9.1
+        -DSLABJSON_TAG=v0.9.2
         -P "${PROJECT_SOURCE_DIR}/cmake/ValidateRelease.cmake"
 )
 set_tests_properties(slabjson.release.rejects_project_version_mismatch PROPERTIES
@@ -105,7 +105,7 @@ set_tests_properties(slabjson.release.rejects_project_version_mismatch PROPERTIE
 add_test(NAME slabjson.release.rejects_missing_changelog_entry
     COMMAND "${CMAKE_COMMAND}"
         "-DSLABJSON_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
-        -DSLABJSON_TAG=v0.9.0
+        -DSLABJSON_TAG=v0.9.1
         "-DSLABJSON_CHANGELOG_FILE=${PROJECT_SOURCE_DIR}/tests/fixtures/CHANGELOG-missing-release.md"
         -P "${PROJECT_SOURCE_DIR}/cmake/ValidateRelease.cmake"
 )

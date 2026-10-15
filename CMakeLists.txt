@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(slabjson
-    VERSION 0.9.0
+    VERSION 0.9.1
     DESCRIPTION "A fixed-capacity, allocation-free C++20 JSON library"
     HOMEPAGE_URL "https://github.com/stevenoonan/slabjson"
     LANGUAGES CXX
