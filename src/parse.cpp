@@ -9,6 +9,7 @@
 #include <string_view>
 #include <utility>
 
+#include <slabjson/detail/utf8.hpp>
 #include <slabjson/slab.hpp>
 
 namespace slabjson {
@@ -661,42 +662,11 @@ private:
     [[nodiscard]] Result<std::size_t> validate_utf8(
         std::size_t offset) const noexcept
     {
-        const auto first =
-            static_cast<unsigned char>(input_[offset]);
-        std::size_t length = 0;
-        if (first >= 0xc2 && first <= 0xdf) {
-            length = 2;
-        } else if (first >= 0xe0 && first <= 0xef) {
-            length = 3;
-        } else if (first >= 0xf0 && first <= 0xf4) {
-            length = 4;
-        } else {
-            return Error{ErrorCode::ParseInvalidString, offset};
+        auto sequence = utf8_sequence_length(input_, offset);
+        if (!sequence) {
+            return Error{ErrorCode::ParseInvalidString, sequence.error().offset};
         }
-
-        if (offset + length > input_.size()) {
-            return Error{ErrorCode::ParseInvalidString, offset};
-        }
-        for (std::size_t index = 1; index < length; ++index) {
-            const auto continuation =
-                static_cast<unsigned char>(input_[offset + index]);
-            if (continuation < 0x80 || continuation > 0xbf) {
-                return Error{
-                    ErrorCode::ParseInvalidString,
-                    offset + index,
-                };
-            }
-        }
-
-        const auto second =
-            static_cast<unsigned char>(input_[offset + 1]);
-        if ((first == 0xe0 && second < 0xa0)
-            || (first == 0xed && second > 0x9f)
-            || (first == 0xf0 && second < 0x90)
-            || (first == 0xf4 && second > 0x8f)) {
-            return Error{ErrorCode::ParseInvalidString, offset};
-        }
-        return length;
+        return sequence.value();
     }
 
     [[nodiscard]] Result<void> consume_literal(
