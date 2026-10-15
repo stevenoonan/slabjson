@@ -367,7 +367,12 @@ std::size_t Object::size() const noexcept
 
 bool Object::empty() const noexcept
 {
-    return size() == 0;
+    const auto* node = slab_ == nullptr
+        ? nullptr
+        : slab_->node_for(id_, generation_);
+    return node == nullptr
+        || node->type != ValueType::Object
+        || node->first_child == Slab::kInvalidNodeId;
 }
 
 Object::iterator Object::begin() const noexcept
