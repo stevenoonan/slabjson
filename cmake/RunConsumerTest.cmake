@@ -36,8 +36,14 @@ if(SLABJSON_CONSUMER_MODE STREQUAL "installed")
         message(FATAL_ERROR "Installing SlabJson failed: ${install_result}")
     endif()
     file(RENAME "${original_prefix}" "${relocated_prefix}")
+    get_filename_component(installed_libdir "${SLABJSON_INSTALL_LIBDIR}"
+        ABSOLUTE BASE_DIR "${relocated_prefix}")
     list(APPEND consumer_arguments
         "-DCMAKE_PREFIX_PATH=${relocated_prefix}"
+        "-Dslabjson_DIR=${installed_libdir}/cmake/slabjson"
+        "-DSLABJSON_INSTALL_PREFIX=${relocated_prefix}"
+        "-DSLABJSON_INSTALL_INCLUDEDIR=${SLABJSON_INSTALL_INCLUDEDIR}"
+        "-DSLABJSON_INSTALL_DOCDIR=${SLABJSON_INSTALL_DOCDIR}"
     )
 else()
     list(APPEND consumer_arguments
