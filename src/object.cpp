@@ -2,6 +2,8 @@
 
 #include <slabjson/slab.hpp>
 
+#include "detail/container_builder.hpp"
+
 namespace slabjson {
 
 namespace {
@@ -94,23 +96,10 @@ Result<void> Object::add(
     std::string_view key,
     std::string_view string_value) noexcept
 {
-    auto current = status();
-    if (!current) {
-        return record_error(current.error());
-    }
-
-    const auto checkpoint = slab_->checkpoint();
-    auto value_result = slab_->make_string(string_value);
-    if (!value_result) {
-        return record_error(value_result.error());
-    }
-
-    auto add_result = add(key, value_result.value());
-    if (!add_result) {
-        slab_->rollback(checkpoint);
-        return add_result.error();
-    }
-    return {};
+    return detail::ContainerBuilder::add<void>(
+        *this, slab_,
+        [&]() noexcept { return slab_->make_string(string_value); },
+        [&](Value child) noexcept { return add(key, child); });
 }
 
 Result<void> Object::add(std::string_view key, const char* string_value) noexcept
@@ -127,151 +116,58 @@ Result<void> Object::add(std::string_view key, const char* string_value) noexcep
 
 Result<void> Object::add(std::string_view key, bool bool_value) noexcept
 {
-    auto current = status();
-    if (!current) {
-        return record_error(current.error());
-    }
-
-    const auto checkpoint = slab_->checkpoint();
-    auto value_result = slab_->make_bool(bool_value);
-    if (!value_result) {
-        return record_error(value_result.error());
-    }
-
-    auto add_result = add(key, value_result.value());
-    if (!add_result) {
-        slab_->rollback(checkpoint);
-        return add_result.error();
-    }
-    return {};
+    return detail::ContainerBuilder::add<void>(
+        *this, slab_,
+        [&]() noexcept { return slab_->make_bool(bool_value); },
+        [&](Value child) noexcept { return add(key, child); });
 }
 
 Result<void> Object::add(std::string_view key, std::int64_t number_value) noexcept
 {
-    auto current = status();
-    if (!current) {
-        return record_error(current.error());
-    }
-
-    const auto checkpoint = slab_->checkpoint();
-    auto value_result = slab_->make_number(number_value);
-    if (!value_result) {
-        return record_error(value_result.error());
-    }
-
-    auto add_result = add(key, value_result.value());
-    if (!add_result) {
-        slab_->rollback(checkpoint);
-        return add_result.error();
-    }
-    return {};
+    return detail::ContainerBuilder::add<void>(
+        *this, slab_,
+        [&]() noexcept { return slab_->make_number(number_value); },
+        [&](Value child) noexcept { return add(key, child); });
 }
 
 Result<void> Object::add(std::string_view key, std::uint64_t number_value) noexcept
 {
-    auto current = status();
-    if (!current) {
-        return record_error(current.error());
-    }
-
-    const auto checkpoint = slab_->checkpoint();
-    auto value_result = slab_->make_number(number_value);
-    if (!value_result) {
-        return record_error(value_result.error());
-    }
-
-    auto add_result = add(key, value_result.value());
-    if (!add_result) {
-        slab_->rollback(checkpoint);
-        return add_result.error();
-    }
-    return {};
+    return detail::ContainerBuilder::add<void>(
+        *this, slab_,
+        [&]() noexcept { return slab_->make_number(number_value); },
+        [&](Value child) noexcept { return add(key, child); });
 }
 
 Result<void> Object::add(std::string_view key, double number_value) noexcept
 {
-    auto current = status();
-    if (!current) {
-        return record_error(current.error());
-    }
-
-    const auto checkpoint = slab_->checkpoint();
-    auto value_result = slab_->make_number(number_value);
-    if (!value_result) {
-        return record_error(value_result.error());
-    }
-
-    auto add_result = add(key, value_result.value());
-    if (!add_result) {
-        slab_->rollback(checkpoint);
-        return add_result.error();
-    }
-    return {};
+    return detail::ContainerBuilder::add<void>(
+        *this, slab_,
+        [&]() noexcept { return slab_->make_number(number_value); },
+        [&](Value child) noexcept { return add(key, child); });
 }
 
 Result<void> Object::add_null(std::string_view key) noexcept
 {
-    auto current = status();
-    if (!current) {
-        return record_error(current.error());
-    }
-
-    const auto checkpoint = slab_->checkpoint();
-    auto value_result = slab_->make_null();
-    if (!value_result) {
-        return record_error(value_result.error());
-    }
-
-    auto add_result = add(key, value_result.value());
-    if (!add_result) {
-        slab_->rollback(checkpoint);
-        return add_result.error();
-    }
-    return {};
+    return detail::ContainerBuilder::add<void>(
+        *this, slab_,
+        [&]() noexcept { return slab_->make_null(); },
+        [&](Value child) noexcept { return add(key, child); });
 }
 
 Result<Object> Object::add_object(std::string_view key) noexcept
 {
-    auto current = status();
-    if (!current) {
-        return record_error(current.error());
-    }
-
-    const auto checkpoint = slab_->checkpoint();
-    auto object_result = slab_->make_object();
-    if (!object_result) {
-        return record_error(object_result.error());
-    }
-
-    Object object = object_result.value();
-    auto add_result = add(key, object.value());
-    if (!add_result) {
-        slab_->rollback(checkpoint);
-        return add_result.error();
-    }
-    return object;
+    return detail::ContainerBuilder::add<Object>(
+        *this, slab_,
+        [&]() noexcept { return slab_->make_object(); },
+        [&](Value child) noexcept { return add(key, child); });
 }
 
 Result<Array> Object::add_array(std::string_view key) noexcept
 {
-    auto current = status();
-    if (!current) {
-        return record_error(current.error());
-    }
-
-    const auto checkpoint = slab_->checkpoint();
-    auto array_result = slab_->make_array();
-    if (!array_result) {
-        return record_error(array_result.error());
-    }
-
-    Array array = array_result.value();
-    auto add_result = add(key, array.value());
-    if (!add_result) {
-        slab_->rollback(checkpoint);
-        return add_result.error();
-    }
-    return array;
+    return detail::ContainerBuilder::add<Array>(
+        *this, slab_,
+        [&]() noexcept { return slab_->make_array(); },
+        [&](Value child) noexcept { return add(key, child); });
 }
 
 std::optional<Value> Object::find(std::string_view key) const noexcept

@@ -30,6 +30,10 @@ add_executable(test_utf8 test_utf8.cpp)
 target_link_libraries(test_utf8 PRIVATE slabjson::slabjson)
 add_test(NAME slabjson.utf8 COMMAND test_utf8)
 
+add_executable(test_construction test_construction.cpp)
+target_link_libraries(test_construction PRIVATE slabjson::slabjson)
+add_test(NAME slabjson.construction COMMAND test_construction)
+
 add_executable(test_cjson_compat test_cjson_compat.cpp)
 target_link_libraries(test_cjson_compat PRIVATE slabjson::slabjson)
 add_test(NAME slabjson.cjson_compat COMMAND test_cjson_compat)
