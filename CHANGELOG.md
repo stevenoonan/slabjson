@@ -19,6 +19,7 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   while preserving their error codes and byte offsets.
 - Object and array construction share status, allocation, attachment, and
   rollback handling through a private helper.
+- Object and array `empty()` checks inspect the first child in constant time.
 
 ### Fixed
 
