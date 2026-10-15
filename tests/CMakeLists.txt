@@ -112,37 +112,17 @@ add_test(NAME slabjson.consumer.fetchcontent
 add_test(NAME slabjson.release.valid
     COMMAND "${CMAKE_COMMAND}"
         "-DSLABJSON_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
-        -DSLABJSON_TAG=v0.9.1
+        "-DSLABJSON_TAG=v${PROJECT_VERSION}"
         -P "${PROJECT_SOURCE_DIR}/cmake/ValidateRelease.cmake"
 )
 
-add_test(NAME slabjson.release.rejects_invalid_tag
-    COMMAND "${CMAKE_COMMAND}"
-        "-DSLABJSON_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
-        -DSLABJSON_TAG=release-0.9.1
-        -P "${PROJECT_SOURCE_DIR}/cmake/ValidateRelease.cmake"
-)
-set_tests_properties(slabjson.release.rejects_invalid_tag PROPERTIES
-    WILL_FAIL TRUE
-)
-
-add_test(NAME slabjson.release.rejects_project_version_mismatch
-    COMMAND "${CMAKE_COMMAND}"
-        "-DSLABJSON_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
-        -DSLABJSON_TAG=v0.9.2
-        -P "${PROJECT_SOURCE_DIR}/cmake/ValidateRelease.cmake"
-)
-set_tests_properties(slabjson.release.rejects_project_version_mismatch PROPERTIES
-    WILL_FAIL TRUE
-)
-
-add_test(NAME slabjson.release.rejects_missing_changelog_entry
-    COMMAND "${CMAKE_COMMAND}"
-        "-DSLABJSON_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
-        -DSLABJSON_TAG=v0.9.1
-        "-DSLABJSON_CHANGELOG_FILE=${PROJECT_SOURCE_DIR}/tests/fixtures/CHANGELOG-missing-release.md"
-        -P "${PROJECT_SOURCE_DIR}/cmake/ValidateRelease.cmake"
-)
-set_tests_properties(slabjson.release.rejects_missing_changelog_entry
-    PROPERTIES WILL_FAIL TRUE
-)
+foreach(rejection invalid_tag project_version_mismatch missing_changelog_entry)
+    add_test(NAME slabjson.release.rejects_${rejection}
+        COMMAND "${CMAKE_COMMAND}"
+            "-DSLABJSON_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+            "-DSLABJSON_BINARY_DIR=${PROJECT_BINARY_DIR}"
+            "-DSLABJSON_VERSION=${PROJECT_VERSION}"
+            "-DSLABJSON_TEST_CASE=${rejection}"
+            -P "${PROJECT_SOURCE_DIR}/cmake/RunReleaseValidationTest.cmake"
+    )
+endforeach()
