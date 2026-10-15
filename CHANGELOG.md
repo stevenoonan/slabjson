@@ -24,6 +24,8 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   floating-point representation when parsed again.
 - Memory reports fail when corpus operations fail and measure canonical
   capacity checks instead of reporting hardcoded results.
+- Installed-consumer tests honor configured library, header, and documentation
+  directories and verify archives through the imported CMake target.
 
 ## [0.9.0] - 2026-08-03
 
