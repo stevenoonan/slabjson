@@ -10,6 +10,8 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Sticky first-error status for object and array additions, with shared slab
   status checks and explicit error clearing.
+- Standalone JSONTestSuite conformance, allocation guard tests, and bounded
+  sanitizer fuzzing in CI, with opt-in conformance and fuzz build options.
 
 ### Changed
 

@@ -20,6 +20,8 @@ option(SLABJSON_BUILD_TESTS
 )
 unset(slabjson_build_tests_default)
 option(SLABJSON_BUILD_BENCHMARKS "Build SlabJson host benchmarks" OFF)
+option(SLABJSON_BUILD_CONFORMANCE "Build the standalone JSONTestSuite runner" OFF)
+option(SLABJSON_BUILD_FUZZERS "Build Clang libFuzzer targets with sanitizers" OFF)
 option(SLABJSON_ENABLE_EXCEPTIONS "Allow exceptions" OFF)
 option(SLABJSON_ENABLE_LTO "Enable link-time optimization for SlabJson" OFF)
 
@@ -76,6 +78,26 @@ endif()
 if(SLABJSON_BUILD_BENCHMARKS)
     enable_testing()
     add_subdirectory(benchmarks)
+endif()
+
+if(SLABJSON_BUILD_CONFORMANCE)
+    include(cmake/JsonTestSuite.cmake)
+    enable_testing()
+    add_executable(slabjson_json_conformance tests/conformance_main.cpp)
+    target_link_libraries(slabjson_json_conformance PRIVATE slabjson::slabjson)
+    target_compile_definitions(slabjson_json_conformance PRIVATE
+        SLABJSON_JSON_TEST_SUITE_DIR="${SLABJSON_JSON_TEST_SUITE_DIR}")
+    add_test(NAME slabjson.conformance COMMAND slabjson_json_conformance)
+endif()
+
+if(SLABJSON_BUILD_FUZZERS)
+    if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        message(FATAL_ERROR "SlabJson fuzz targets require Clang with libFuzzer")
+    endif()
+    target_compile_options(slabjson PRIVATE
+        -fsanitize=fuzzer-no-link,address,undefined -fno-omit-frame-pointer)
+    target_link_options(slabjson INTERFACE -fsanitize=address,undefined)
+    add_subdirectory(fuzz)
 endif()
 
 set(slabjson_cmake_install_dir

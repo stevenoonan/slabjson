@@ -34,6 +34,15 @@ add_executable(test_construction test_construction.cpp)
 target_link_libraries(test_construction PRIVATE slabjson::slabjson)
 add_test(NAME slabjson.construction COMMAND test_construction)
 
+add_executable(test_allocations test_allocations.cpp)
+target_link_libraries(test_allocations PRIVATE slabjson::slabjson)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_definitions(test_allocations PRIVATE SLABJSON_WRAP_ALLOCATIONS)
+    target_link_options(test_allocations PRIVATE
+        -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc)
+endif()
+add_test(NAME slabjson.allocations COMMAND test_allocations)
+
 add_executable(test_cjson_compat test_cjson_compat.cpp)
 target_link_libraries(test_cjson_compat PRIVATE slabjson::slabjson)
 add_test(NAME slabjson.cjson_compat COMMAND test_cjson_compat)
