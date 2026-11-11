@@ -1,5 +1,7 @@
 #pragma once
 
+#include <slabjson/numbers.hpp>
+
 #include <cstdint>
 #include <optional>
 #include <string_view>
@@ -51,10 +53,16 @@ public:
     [[nodiscard]] std::optional<NumberKind> number_kind() const noexcept;
     // Integral accessors perform checked, lossless conversion between signed
     // and unsigned integer storage. Floating-point storage is not converted.
-    [[nodiscard]] std::optional<std::int64_t> as_int64() const noexcept;
-    [[nodiscard]] std::optional<std::uint64_t> as_uint64() const noexcept;
-    // Exact integers may be rounded when converted to double.
-    [[nodiscard]] std::optional<double> as_number() const noexcept;
+    [[nodiscard]] std::optional<int_t> as_integer() const noexcept;
+    [[nodiscard]] std::optional<uint_t> as_unsigned_integer() const noexcept;
+#if SLABJSON_FULL_NUMBERS
+    [[nodiscard]] std::optional<int_t> as_int64() const noexcept { return as_integer(); }
+    [[nodiscard]] std::optional<uint_t> as_uint64() const noexcept { return as_unsigned_integer(); }
+#endif
+    // Exact integers may be rounded when converted to float_t.
+#if SLABJSON_HAS_FLOAT
+    [[nodiscard]] std::optional<float_t> as_number() const noexcept;
+#endif
     [[nodiscard]] std::optional<std::string_view> as_string() const noexcept;
     [[nodiscard]] std::optional<Array> as_array() const noexcept;
     [[nodiscard]] std::optional<Object> as_object() const noexcept;

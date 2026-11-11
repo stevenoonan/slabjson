@@ -7,6 +7,43 @@ permissions:
   contents: read
 
 jobs:
+  mcu-configurations:
+    name: MCU configuration / ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: compact32
+            options: -DSLABJSON_NUMBER_MODE=COMPACT32
+          - name: integer32
+            options: -DSLABJSON_NUMBER_MODE=INTEGER32
+          - name: mcu32
+            options: -DSLABJSON_NUMBER_MODE=COMPACT32 -DSLABJSON_OPTIMIZE_SIZE=ON -DSLABJSON_ENABLE_PRETTY=OFF -DSLABJSON_ENABLE_CJSON_COMPAT=OFF -DSLABJSON_MAX_PARSER_DEPTH=16
+          - name: mcu-integer
+            options: -DSLABJSON_NUMBER_MODE=INTEGER32 -DSLABJSON_OPTIMIZE_SIZE=ON -DSLABJSON_ENABLE_PRETTY=OFF -DSLABJSON_ENABLE_CJSON_COMPAT=OFF -DSLABJSON_MAX_PARSER_DEPTH=16
+          - name: size-full
+            options: -DSLABJSON_OPTIMIZE_SIZE=ON
+          - name: no-parser
+            options: -DSLABJSON_ENABLE_PARSER=OFF
+          - name: no-serializer
+            options: -DSLABJSON_ENABLE_SERIALIZER=OFF
+          - name: no-pretty
+            options: -DSLABJSON_ENABLE_PRETTY=OFF
+          - name: no-compat
+            options: -DSLABJSON_ENABLE_CJSON_COMPAT=OFF
+          - name: construction-only
+            options: -DSLABJSON_NUMBER_MODE=INTEGER32 -DSLABJSON_ENABLE_PARSER=OFF -DSLABJSON_ENABLE_SERIALIZER=OFF -DSLABJSON_ENABLE_PRETTY=OFF -DSLABJSON_ENABLE_CJSON_COMPAT=OFF
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=MinSizeRel ${{ matrix.options }}
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test including package consumers
+        run: ctest --test-dir build --output-on-failure
+
   conformance:
     name: Linux / JSONTestSuite conformance
     runs-on: ubuntu-latest

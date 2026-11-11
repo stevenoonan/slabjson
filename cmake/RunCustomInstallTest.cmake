@@ -18,6 +18,11 @@ set(configure_command
     -DSLABJSON_BUILD_TESTS=OFF
     -DSLABJSON_BUILD_BENCHMARKS=OFF
 )
+foreach(setting NUMBER_MODE ENABLE_PARSER ENABLE_SERIALIZER ENABLE_PRETTY ENABLE_CJSON_COMPAT OPTIMIZE_SIZE MAX_PARSER_DEPTH)
+    if(DEFINED SLABJSON_${setting})
+        list(APPEND configure_command "-DSLABJSON_${setting}=${SLABJSON_${setting}}")
+    endif()
+endforeach()
 if(SLABJSON_GENERATOR_PLATFORM)
     list(APPEND configure_command -A "${SLABJSON_GENERATOR_PLATFORM}")
 endif()

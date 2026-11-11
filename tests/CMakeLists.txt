@@ -1,38 +1,16 @@
-add_executable(test_slab test_slab.cpp)
-target_link_libraries(test_slab PRIVATE slabjson::slabjson)
-add_test(NAME slabjson.slab COMMAND test_slab)
+add_executable(test_configuration test_configuration.cpp)
+target_link_libraries(test_configuration PRIVATE slabjson::slabjson)
+add_test(NAME slabjson.configuration COMMAND test_configuration)
 
-add_executable(test_value test_value.cpp)
-target_link_libraries(test_value PRIVATE slabjson::slabjson)
-add_test(NAME slabjson.value COMMAND test_value)
-
-add_executable(test_object test_object.cpp)
-target_link_libraries(test_object PRIVATE slabjson::slabjson)
-add_test(NAME slabjson.object COMMAND test_object)
-
-add_executable(test_array test_array.cpp)
-target_link_libraries(test_array PRIVATE slabjson::slabjson)
-add_test(NAME slabjson.array COMMAND test_array)
-
-add_executable(test_serialize test_serialize.cpp)
-target_link_libraries(test_serialize PRIVATE slabjson::slabjson)
-add_test(NAME slabjson.serialize COMMAND test_serialize)
-
-add_executable(test_parse test_parse.cpp)
-target_link_libraries(test_parse PRIVATE slabjson::slabjson)
-add_test(NAME slabjson.parse COMMAND test_parse)
-
-add_executable(test_hardening test_hardening.cpp)
-target_link_libraries(test_hardening PRIVATE slabjson::slabjson)
-add_test(NAME slabjson.hardening COMMAND test_hardening)
-
-add_executable(test_utf8 test_utf8.cpp)
-target_link_libraries(test_utf8 PRIVATE slabjson::slabjson)
-add_test(NAME slabjson.utf8 COMMAND test_utf8)
-
-add_executable(test_construction test_construction.cpp)
-target_link_libraries(test_construction PRIVATE slabjson::slabjson)
-add_test(NAME slabjson.construction COMMAND test_construction)
+if(SLABJSON_FULL_NUMBERS AND SLABJSON_ENABLE_PARSER AND SLABJSON_ENABLE_SERIALIZER
+    AND SLABJSON_ENABLE_PRETTY AND SLABJSON_ENABLE_CJSON_COMPAT
+    AND SLABJSON_MAX_PARSER_DEPTH GREATER_EQUAL 32)
+    foreach(suite slab value object array serialize parse hardening utf8 construction cjson_compat)
+        add_executable(test_${suite} test_${suite}.cpp)
+        target_link_libraries(test_${suite} PRIVATE slabjson::slabjson)
+        add_test(NAME slabjson.${suite} COMMAND test_${suite})
+    endforeach()
+endif()
 
 add_executable(test_allocations test_allocations.cpp)
 target_link_libraries(test_allocations PRIVATE slabjson::slabjson)
@@ -43,9 +21,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Cla
 endif()
 add_test(NAME slabjson.allocations COMMAND test_allocations)
 
-add_executable(test_cjson_compat test_cjson_compat.cpp)
-target_link_libraries(test_cjson_compat PRIVATE slabjson::slabjson)
-add_test(NAME slabjson.cjson_compat COMMAND test_cjson_compat)
+set(slabjson_consumer_configuration_args)
+foreach(setting NUMBER_MODE ENABLE_PARSER ENABLE_SERIALIZER ENABLE_PRETTY ENABLE_CJSON_COMPAT OPTIMIZE_SIZE MAX_PARSER_DEPTH)
+    list(APPEND slabjson_consumer_configuration_args "-DSLABJSON_${setting}=${SLABJSON_${setting}}")
+endforeach()
 
 add_test(NAME slabjson.consumer.installed
     COMMAND "${CMAKE_COMMAND}"
@@ -57,6 +36,7 @@ add_test(NAME slabjson.consumer.installed
         "-DSLABJSON_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}"
         "-DSLABJSON_CONFIG=$<CONFIG>"
         "-DSLABJSON_CXX_FLAGS=${CMAKE_CXX_FLAGS}"
+        ${slabjson_consumer_configuration_args}
         "-DSLABJSON_EXE_LINKER_FLAGS=${CMAKE_EXE_LINKER_FLAGS}"
         -DSLABJSON_CONSUMER_MODE=installed
         "-DSLABJSON_INSTALL_LIBDIR=${CMAKE_INSTALL_LIBDIR}"
@@ -75,6 +55,7 @@ add_test(NAME slabjson.consumer.custom_install_dirs
         "-DSLABJSON_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}"
         "-DSLABJSON_CONFIG=$<CONFIG>"
         "-DSLABJSON_CXX_FLAGS=${CMAKE_CXX_FLAGS}"
+        ${slabjson_consumer_configuration_args}
         "-DSLABJSON_EXE_LINKER_FLAGS=${CMAKE_EXE_LINKER_FLAGS}"
         -P "${PROJECT_SOURCE_DIR}/cmake/RunCustomInstallTest.cmake"
 )
@@ -89,6 +70,7 @@ add_test(NAME slabjson.consumer.subproject
         "-DSLABJSON_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}"
         "-DSLABJSON_CONFIG=$<CONFIG>"
         "-DSLABJSON_CXX_FLAGS=${CMAKE_CXX_FLAGS}"
+        ${slabjson_consumer_configuration_args}
         "-DSLABJSON_EXE_LINKER_FLAGS=${CMAKE_EXE_LINKER_FLAGS}"
         -DSLABJSON_CONSUMER_MODE=subproject
         -P "${PROJECT_SOURCE_DIR}/cmake/RunConsumerTest.cmake"
@@ -104,6 +86,7 @@ add_test(NAME slabjson.consumer.fetchcontent
         "-DSLABJSON_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}"
         "-DSLABJSON_CONFIG=$<CONFIG>"
         "-DSLABJSON_CXX_FLAGS=${CMAKE_CXX_FLAGS}"
+        ${slabjson_consumer_configuration_args}
         "-DSLABJSON_EXE_LINKER_FLAGS=${CMAKE_EXE_LINKER_FLAGS}"
         -DSLABJSON_CONSUMER_MODE=fetchcontent
         -P "${PROJECT_SOURCE_DIR}/cmake/RunConsumerTest.cmake"
@@ -126,3 +109,28 @@ foreach(rejection invalid_tag project_version_mismatch missing_changelog_entry)
             -P "${PROJECT_SOURCE_DIR}/cmake/RunReleaseValidationTest.cmake"
     )
 endforeach()
+
+foreach(value 0 -1 1.5 65535 999999999999999999999999999999999999)
+    add_test(NAME slabjson.configuration.rejects_depth_${value}
+        COMMAND "${CMAKE_COMMAND}"
+            "-DSLABJSON_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+            "-DSLABJSON_BINARY_DIR=${PROJECT_BINARY_DIR}/invalid-depth-${value}"
+            "-DSLABJSON_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+        "-DSLABJSON_GENERATOR=${CMAKE_GENERATOR}"
+        "-DSLABJSON_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}"
+        "-DSLABJSON_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}"
+            -DSLABJSON_SETTING=SLABJSON_MAX_PARSER_DEPTH "-DSLABJSON_VALUE=${value}"
+            "-DSLABJSON_EXPECTED_MESSAGE=SLABJSON_MAX_PARSER_DEPTH must be an integer in 1..65534"
+            -P "${PROJECT_SOURCE_DIR}/cmake/RunConfigurationTest.cmake")
+endforeach()
+add_test(NAME slabjson.configuration.rejects_number_mode
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSLABJSON_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+        "-DSLABJSON_BINARY_DIR=${PROJECT_BINARY_DIR}/invalid-number-mode"
+        "-DSLABJSON_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+        "-DSLABJSON_GENERATOR=${CMAKE_GENERATOR}"
+        "-DSLABJSON_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}"
+        "-DSLABJSON_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}"
+        -DSLABJSON_SETTING=SLABJSON_NUMBER_MODE -DSLABJSON_VALUE=INVALID
+        "-DSLABJSON_EXPECTED_MESSAGE=Invalid SLABJSON_NUMBER_MODE: INVALID"
+        -P "${PROJECT_SOURCE_DIR}/cmake/RunConfigurationTest.cmake")

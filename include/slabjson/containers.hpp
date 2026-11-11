@@ -1,5 +1,7 @@
 #pragma once
 
+#include <slabjson/numbers.hpp>
+
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
@@ -103,25 +105,32 @@ public:
         std::string_view value) noexcept;
     Result<void> add(std::string_view key, const char* value) noexcept;
     Result<void> add(std::string_view key, bool value) noexcept;
-    Result<void> add(std::string_view key, std::int64_t value) noexcept;
-    Result<void> add(std::string_view key, std::uint64_t value) noexcept;
-    Result<void> add(std::string_view key, double value) noexcept;
+    Result<void> add(std::string_view key, int_t value) noexcept;
+    Result<void> add(std::string_view key, uint_t value) noexcept;
+#if SLABJSON_HAS_FLOAT
+    Result<void> add(std::string_view key, float_t value) noexcept;
+#endif
 
     template <std::signed_integral T>
         requires (!std::same_as<std::remove_cv_t<T>, bool>
-            && !std::same_as<std::remove_cv_t<T>, std::int64_t>)
+            && !std::same_as<std::remove_cv_t<T>, int_t>
+            && sizeof(T) <= sizeof(int_t))
     Result<void> add(std::string_view key, T value) noexcept
     {
-        return add(key, static_cast<std::int64_t>(value));
+        return add(key, static_cast<int_t>(value));
     }
 
     template <std::unsigned_integral T>
         requires (!std::same_as<std::remove_cv_t<T>, bool>
-            && !std::same_as<std::remove_cv_t<T>, std::uint64_t>)
+            && !std::same_as<std::remove_cv_t<T>, uint_t>
+            && sizeof(T) <= sizeof(uint_t))
     Result<void> add(std::string_view key, T value) noexcept
     {
-        return add(key, static_cast<std::uint64_t>(value));
+        return add(key, static_cast<uint_t>(value));
     }
+
+    template <detail::UnsupportedNumber T>
+    Result<void> add(std::string_view, T) noexcept = delete;
 
     Result<void> add_null(std::string_view key) noexcept;
 
@@ -133,13 +142,19 @@ public:
     [[nodiscard]] Result<std::string_view> get_string(
         std::string_view key) const noexcept;
     [[nodiscard]] Result<bool> get_bool(std::string_view key) const noexcept;
-    [[nodiscard]] Result<std::int64_t> get_int64(
+    [[nodiscard]] Result<int_t> get_integer(
         std::string_view key) const noexcept;
-    [[nodiscard]] Result<std::uint64_t> get_uint64(
+    [[nodiscard]] Result<uint_t> get_unsigned_integer(
         std::string_view key) const noexcept;
-    // Exact integers may be rounded when converted to double.
-    [[nodiscard]] Result<double> get_number(
+#if SLABJSON_FULL_NUMBERS
+    [[nodiscard]] Result<int_t> get_int64(std::string_view key) const noexcept { return get_integer(key); }
+    [[nodiscard]] Result<uint_t> get_uint64(std::string_view key) const noexcept { return get_unsigned_integer(key); }
+#endif
+    // Exact integers may be rounded when converted to float_t.
+#if SLABJSON_HAS_FLOAT
+    [[nodiscard]] Result<float_t> get_number(
         std::string_view key) const noexcept;
+#endif
     [[nodiscard]] Result<Object> get_object(
         std::string_view key) const noexcept;
     [[nodiscard]] Result<Array> get_array(
@@ -181,25 +196,32 @@ public:
     Result<void> add(std::string_view value) noexcept;
     Result<void> add(const char* value) noexcept;
     Result<void> add(bool value) noexcept;
-    Result<void> add(std::int64_t value) noexcept;
-    Result<void> add(std::uint64_t value) noexcept;
-    Result<void> add(double value) noexcept;
+    Result<void> add(int_t value) noexcept;
+    Result<void> add(uint_t value) noexcept;
+#if SLABJSON_HAS_FLOAT
+    Result<void> add(float_t value) noexcept;
+#endif
 
     template <std::signed_integral T>
         requires (!std::same_as<std::remove_cv_t<T>, bool>
-            && !std::same_as<std::remove_cv_t<T>, std::int64_t>)
+            && !std::same_as<std::remove_cv_t<T>, int_t>
+            && sizeof(T) <= sizeof(int_t))
     Result<void> add(T value) noexcept
     {
-        return add(static_cast<std::int64_t>(value));
+        return add(static_cast<int_t>(value));
     }
 
     template <std::unsigned_integral T>
         requires (!std::same_as<std::remove_cv_t<T>, bool>
-            && !std::same_as<std::remove_cv_t<T>, std::uint64_t>)
+            && !std::same_as<std::remove_cv_t<T>, uint_t>
+            && sizeof(T) <= sizeof(uint_t))
     Result<void> add(T value) noexcept
     {
-        return add(static_cast<std::uint64_t>(value));
+        return add(static_cast<uint_t>(value));
     }
+
+    template <detail::UnsupportedNumber T>
+    Result<void> add(T) noexcept = delete;
 
     Result<void> add_null() noexcept;
 

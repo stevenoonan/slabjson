@@ -47,7 +47,7 @@ public:
         }
 
         Slab::NodeId previous_id = Slab::kInvalidNodeId;
-        Slab::NodeId child_id = parent->first_child;
+        Slab::NodeId child_id = parent->first_child();
         while (child_id != Slab::kInvalidNodeId && index > 0) {
             Slab::Node* child =
                 array.slab_->node_for(child_id, array.generation_);
@@ -76,7 +76,7 @@ public:
         }
 
         Slab::NodeId previous_id = Slab::kInvalidNodeId;
-        Slab::NodeId child_id = parent->first_child;
+        Slab::NodeId child_id = parent->first_child();
         while (child_id != Slab::kInvalidNodeId) {
             Slab::Node* child =
                 object.slab_->node_for(child_id, object.generation_);
@@ -147,7 +147,7 @@ private:
         }
 
         if (previous_id == Slab::kInvalidNodeId) {
-            parent.first_child = child->next_sibling;
+            parent.first_child() = child->next_sibling;
         } else {
             Slab::Node* previous =
                 slab->node_for(previous_id, parent_value.generation_);
@@ -156,8 +156,8 @@ private:
             }
             previous->next_sibling = child->next_sibling;
         }
-        if (parent.last_child == child_id) {
-            parent.last_child = previous_id;
+        if (parent.last_child() == child_id) {
+            parent.last_child() = previous_id;
         }
 
         child->parent = Slab::kInvalidNodeId;
@@ -211,9 +211,10 @@ public:
         Slab::NodeId destination_id = root_allocation.id;
         Slab::Node* destination_node = root_allocation.node;
         while (true) {
-            if (source_node->first_child != Slab::kInvalidNodeId) {
+            if ((source_node->type == ValueType::Array || source_node->type == ValueType::Object)
+                && source_node->first_child() != Slab::kInvalidNodeId) {
                 const Slab::NodeId child_source_id =
-                    source_node->first_child;
+                    source_node->first_child();
                 const Slab::Node* child_source =
                     source_slab->node_at_unchecked(child_source_id);
                 auto child_result = clone_node(
@@ -306,8 +307,8 @@ private:
         Slab::Node& child,
         Slab::NodeId child_id) noexcept
     {
-        parent.first_child = child_id;
-        parent.last_child = child_id;
+        parent.first_child() = child_id;
+        parent.last_child() = child_id;
         child.parent = parent_id;
     }
 
@@ -319,7 +320,7 @@ private:
         Slab::NodeId sibling_id) noexcept
     {
         previous.next_sibling = sibling_id;
-        parent.last_child = sibling_id;
+        parent.last_child() = sibling_id;
         sibling.parent = parent_id;
     }
 
@@ -345,7 +346,9 @@ private:
         node->aux = source.aux;
         node->key_flags = source.key_flags;
         node->value_flags = source.value_flags;
-        node->payload = source.payload;
+        if (source.type != ValueType::Array && source.type != ValueType::Object) {
+            node->payload = source.payload;
+        }
 
         if (source.type == ValueType::String) {
             auto string_result = destination.copy_string_trusted(
@@ -392,6 +395,7 @@ namespace {
     return result.value().value();
 }
 
+#if SLABJSON_ENABLE_SERIALIZER
 [[nodiscard]] Result<void> require_terminated_capacity(
     std::size_t json_size,
     std::span<char> output) noexcept
@@ -402,6 +406,7 @@ namespace {
     }
     return {};
 }
+#endif
 
 } // namespace
 
@@ -425,20 +430,22 @@ Result<Item> create_bool(Slab& slab, bool value) noexcept
     return slab.make_bool(value);
 }
 
-Result<Item> create_number(Slab& slab, std::int64_t value) noexcept
+Result<Item> create_number(Slab& slab, int_t value) noexcept
 {
     return slab.make_number(value);
 }
 
-Result<Item> create_number(Slab& slab, std::uint64_t value) noexcept
+Result<Item> create_number(Slab& slab, uint_t value) noexcept
 {
     return slab.make_number(value);
 }
 
-Result<Item> create_number(Slab& slab, double value) noexcept
+#if SLABJSON_HAS_FLOAT
+Result<Item> create_number(Slab& slab, float_t value) noexcept
 {
     return slab.make_number(value);
 }
+#endif
 
 Result<Item> create_string(
     Slab& slab,
@@ -583,11 +590,14 @@ std::optional<std::string_view> get_string_value(Item item) noexcept
     return item.as_string();
 }
 
-std::optional<double> get_number_value(Item item) noexcept
+#if SLABJSON_HAS_FLOAT
+std::optional<float_t> get_number_value(Item item) noexcept
 {
     return item.as_number();
 }
+#endif
 
+#if SLABJSON_ENABLE_PARSER
 Result<Item> parse(
     Slab& slab,
     std::string_view input,
@@ -595,7 +605,9 @@ Result<Item> parse(
 {
     return slabjson::parse(slab, input, options);
 }
+#endif
 
+#if SLABJSON_ENABLE_SERIALIZER
 Result<std::size_t> print_unformatted(
     Item item,
     std::span<char> output) noexcept
@@ -617,7 +629,9 @@ Result<std::size_t> print_unformatted(
     output[result.value()] = '\0';
     return result.value();
 }
+#endif
 
+#if SLABJSON_ENABLE_SERIALIZER && SLABJSON_ENABLE_PRETTY
 Result<std::size_t> print_pretty(
     Item item,
     std::span<char> output,
@@ -644,17 +658,24 @@ Result<std::size_t> print_pretty(
     output[result.value()] = '\0';
     return result.value();
 }
+#endif
 
+#if SLABJSON_ENABLE_SERIALIZER
 Result<std::size_t> print_preallocated(
     Item item,
     std::span<char> output,
     bool formatted,
     std::uint8_t indent_spaces) noexcept
 {
-    return formatted
-        ? print_pretty(item, output, indent_spaces)
-        : print_unformatted(item, output);
+#if SLABJSON_ENABLE_PRETTY
+    if (formatted) { return print_pretty(item, output, indent_spaces); }
+#else
+    (void)indent_spaces;
+    if (formatted) { return Error{ErrorCode::InvalidArgument, 0}; }
+#endif
+    return print_unformatted(item, output);
 }
+#endif
 
 Result<Item> duplicate(
     Slab& destination,

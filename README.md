@@ -34,7 +34,7 @@ It is especially suitable for:
 * `StaticSlab<N>` convenience type for owned fixed storage
 * 16-bit node IDs and string offsets
 * Maximum slab capacity of 65,535 bytes
-* Compact 24-byte internal node representation
+* 24-byte nodes by default; optional 16-byte nodes with 32-bit numbers
 * Strings stored from the opposite end of the slab
 * Object, array, string, bool, null, signed integer, unsigned integer, and floating-point values
 * Exact `int64_t`, `uint64_t`, and `double` number storage
@@ -421,6 +421,140 @@ python3 benchmarks/show_timing_report.py
 | `SLABJSON_BUILD_FUZZERS`     |   `OFF` | Build Clang libFuzzer targets with sanitizers      |
 | `SLABJSON_ENABLE_EXCEPTIONS` |   `OFF` | Allow exceptions; core code does not require them |
 | `SLABJSON_ENABLE_LTO`        |   `OFF` | Enable CMake IPO/LTO when supported               |
+| `SLABJSON_NUMBER_MODE`       | `FULL` | `FULL`, `COMPACT32`, or `INTEGER32` numeric storage |
+| `SLABJSON_ENABLE_PARSER`     | `ON` | Include parsing and cJSON parse wrappers |
+| `SLABJSON_ENABLE_SERIALIZER` | `ON` | Include serialization and cJSON print wrappers |
+| `SLABJSON_ENABLE_PRETTY`     | `ON` | Include pretty output when serialization is enabled |
+| `SLABJSON_ENABLE_CJSON_COMPAT` | `ON` | Include cJSON compatibility helpers |
+| `SLABJSON_OPTIMIZE_SIZE`     | `OFF` | Share serializer traversal and apply size optimization |
+| `SLABJSON_MAX_PARSER_DEPTH`  | `32` | Compiled nesting limit, an integer from 1 through 65,534 |
+| `SLABJSON_BUILD_FOOTPRINT`   | `OFF` | Enable the optional Cortex-M4 footprint report target |
+
+## Microcontroller builds
+
+The defaults retain all existing functionality. Two presets provide smaller
+configurations:
+
+```bash
+cmake --preset mcu-integer
+cmake --build --preset mcu-integer
+ctest --preset mcu-integer
+```
+
+`mcu32` selects 32-bit integers and float; `mcu-integer` selects 32-bit integers
+without floating point. Both use `MinSizeRel`, enable size optimization, set
+maximum parser depth to 16, and disable pretty output and cJSON compatibility.
+These presets use the host compiler unless a cross-compilation toolchain is
+provided. Disable tests when configuring for a target that cannot run them.
+
+| Number mode | Signed / unsigned storage | Floating storage | Node bytes |
+| --- | --- | --- | ---: |
+| `FULL` | int64 / uint64 | double | 24 |
+| `COMPACT32` | int32 / uint32 | float | 16 |
+| `INTEGER32` | int32 / uint32 | disabled | 16 |
+
+Use standard C++ types directly, including `std::int32_t`, `std::uint32_t`,
+smaller integer types, and ordinary integer literals in every mode:
+
+```cpp
+std::uint32_t count = 42;
+std::int32_t delta = -7;
+object.add("count", count);
+object.add("delta", delta);
+```
+
+`float` values and literals such as `1.25f` work in `FULL` and `COMPACT32`;
+`std::int64_t`, `std::uint64_t`, and `double` require `FULL`.
+
+For code that follows the configured storage width, optional aliases are
+`slabjson::int_t`, `slabjson::uint_t`, and, when floating point is enabled,
+`slabjson::float_t`. `Value::as_integer()`, `Value::as_unsigned_integer()`,
+`Object::get_integer()`, and `Object::get_unsigned_integer()` return the selected
+integer types. Floating accessors such as `as_number()` and `get_number()`
+return the selected floating type. Existing `as_int64()`, `as_uint64()`,
+`get_int64()`, and `get_uint64()` remain available in `FULL` mode.
+
+Reduced builds reject wider numeric construction arguments at compile time;
+use explicit checked conversions at application boundaries. For float32 values,
+use float literals such as `1.25f`. `INTEGER32` exposes no floating constructors
+or accessors, and parsing rejects decimal-point and exponent notation, including
+`1.0` and `1e0`. Out-of-range integers fail with `ParseInvalidNumber`; positive
+integers through `UINT32_MAX` remain representable using unsigned storage.
+
+Feature switches remove the corresponding declarations and object files.
+Disabling pretty output removes its entry points; cJSON's
+`print_preallocated(..., true)` returns `InvalidArgument` without modifying the
+output. Other compatibility helpers remain usable when parsing or serialization
+is disabled. Host benchmarks and the fuzz harness require the full feature set;
+JSONTestSuite conformance requires parsing and full numeric storage.
+
+Parsing uses an explicit eight-byte frame per compiled nesting level instead of
+recursive calls. The default frame array occupies 256 bytes; the MCU presets
+use 128 bytes. Function locals and callees add stack usage. Lowering
+`ParseOptions::max_depth` limits accepted input but does not shrink the compiled
+frame array; set `SLABJSON_MAX_PARSER_DEPTH` to reduce its reserved space.
+
+`SLABJSON_OPTIMIZE_SIZE` trades serializer throughput for one shared traversal
+across measurement and output. Transactional and partial-write contracts remain
+the same. GNU/Clang builds use `-Os -ffunction-sections -fdata-sections`; MSVC
+builds use `/O1 /Gy /Gw`. These options apply privately to the library. For GNU
+embedded firmware, enable section garbage collection on the final executable:
+
+```cmake
+target_link_libraries(firmware PRIVATE slabjson::slabjson)
+target_link_options(firmware PRIVATE -Wl,--gc-sections)
+```
+
+LTO remains separately selectable. All translation units must use the generated
+`slabjson/config.hpp` matching the linked library; CMake exports and installation
+provide it automatically. Rebuild consumers when changing configurations. For
+manual builds, include both the source `include` directory and the configured
+build's `generated` directory.
+
+Smaller nodes reduce occupied slab space; a `StaticSlab<4096>` still reserves
+4096 bytes. Use `Slab::node_size_bytes()` and measured `used_bytes()` to choose
+smaller buffers for your expected documents. Validation, UTF-8 checks, rollback,
+and stale-handle detection remain enabled in every configuration.
+
+### Measuring ARM footprint
+
+With Python 3, Ninja, a host C++20 compiler, and `arm-none-eabi-g++` available:
+
+```bash
+cmake -S . -B build-footprint -DSLABJSON_BUILD_TESTS=OFF \
+  -DSLABJSON_BUILD_FOOTPRINT=ON
+cmake --build build-footprint --target slabjson_footprint_report
+```
+
+Alternatively, run `python3 benchmarks/footprint_report.py --output /tmp/slabjson-footprint`.
+The report builds Cortex-M4 Thumb soft-float programs with identical `-Os -DNDEBUG` size flags,
+section garbage collection, and no LTO. It includes an empty-program baseline,
+construction, parsing, serialization, and round-trip workloads across numeric
+modes and feature configurations. CSV and JSON reports separate text/read-only
+data, initialized data, BSS, provisioned buffers, occupied DOM space, and compiler
+stack frames. Link maps and raw stack reports are retained beside the ELFs.
+
+DOM consumption is measured by running the same fixture on the host with the
+matching configuration; node sizes are asserted in both builds. ARM measurements
+are static link results, without board execution. Stack frames exclude callees
+and are not whole-program peak stack measurements.
+
+For GNU Tools for STM32 GCC 14.3.1, the included round-trip fixture measured:
+
+| Configuration | Text/read-only bytes | Occupied DOM bytes | Parser function frame bytes |
+| --- | ---: | ---: | ---: |
+| `FULL` | 238,364 | 208 | 344 |
+| `INTEGER32` | 9,011 | 144 | 344 |
+| `INTEGER32`, size optimization | 8,179 | 144 | 344 |
+| `mcu-integer` | 7,987 | 144 | 216 |
+
+The empty program measured 896 text/read-only bytes. The fixture provisions a
+512-byte slab and 128-byte output buffer in every round-trip configuration.
+Integer-only ELFs are checked for allocation and floating-conversion symbols;
+the report fails if those dependencies appear or their round-trip code is not
+smaller than `FULL`. Float32 continues to use standard-library text conversion,
+whose support code can be large even when storing only floats. Flash savings
+depend on the target toolchain, linked features, and application call sites.
 
 ## Performance notes
 
