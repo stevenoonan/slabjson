@@ -96,7 +96,7 @@ Result<void> Array::add(bool bool_value) noexcept
         [&](Value child) noexcept { return add(child); });
 }
 
-Result<void> Array::add(std::int64_t number_value) noexcept
+Result<void> Array::add(int_t number_value) noexcept
 {
     return detail::ContainerBuilder::add<void>(
         *this, slab_,
@@ -104,7 +104,7 @@ Result<void> Array::add(std::int64_t number_value) noexcept
         [&](Value child) noexcept { return add(child); });
 }
 
-Result<void> Array::add(std::uint64_t number_value) noexcept
+Result<void> Array::add(uint_t number_value) noexcept
 {
     return detail::ContainerBuilder::add<void>(
         *this, slab_,
@@ -112,13 +112,15 @@ Result<void> Array::add(std::uint64_t number_value) noexcept
         [&](Value child) noexcept { return add(child); });
 }
 
-Result<void> Array::add(double number_value) noexcept
+#if SLABJSON_HAS_FLOAT
+Result<void> Array::add(float_t number_value) noexcept
 {
     return detail::ContainerBuilder::add<void>(
         *this, slab_,
         [&]() noexcept { return slab_->make_number(number_value); },
         [&](Value child) noexcept { return add(child); });
 }
+#endif
 
 Result<void> Array::add_null() noexcept
 {
@@ -153,7 +155,7 @@ std::optional<Value> Array::at(std::size_t index) const noexcept
         return std::nullopt;
     }
 
-    NodeId child_id = array_node->first_child;
+    NodeId child_id = array_node->first_child();
     while (child_id != Slab::kInvalidNodeId && index > 0) {
         const auto* child = slab_->node_for(child_id, generation_);
         if (child == nullptr) {
@@ -179,7 +181,7 @@ std::size_t Array::size() const noexcept
     }
 
     std::size_t count = 0;
-    NodeId child_id = array_node->first_child;
+    NodeId child_id = array_node->first_child();
     while (child_id != Slab::kInvalidNodeId) {
         const auto* child = slab_->node_for(child_id, generation_);
         if (child == nullptr) {
@@ -198,7 +200,7 @@ bool Array::empty() const noexcept
         : slab_->node_for(id_, generation_);
     return node == nullptr
         || node->type != ValueType::Array
-        || node->first_child == Slab::kInvalidNodeId;
+        || node->first_child() == Slab::kInvalidNodeId;
 }
 
 Array::iterator Array::begin() const noexcept
@@ -211,7 +213,7 @@ Array::iterator Array::begin() const noexcept
     }
     return ArrayIterator{
         slab_,
-        array_node->first_child,
+        array_node->first_child(),
         generation_,
     };
 }

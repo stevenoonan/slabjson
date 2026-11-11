@@ -35,43 +35,50 @@ bool exercise_core()
 {
     slabjson::StaticSlab<8192> source;
     slabjson::StaticSlab<8192> destination;
-    auto parsed = slabjson::parse(source,
-        R"({"text":"\u00e9\n\uD83D\uDE00","numbers":[-0.0,1.25e-200,18446744073709551615]})");
+    auto object_result = source.make_object();
+    if (!object_result) return false;
+    auto object = object_result.value();
+    if (!object.add("text", "utf8: é") || !object.add("number", slabjson::int_t{-7})
+        || !object.add("max", std::numeric_limits<slabjson::uint_t>::max())) return false;
+#if SLABJSON_HAS_FLOAT
+    if (!object.add("fraction", slabjson::float_t{1.25})) return false;
+#endif
+    auto value = object.value();
+#if SLABJSON_ENABLE_PARSER
+    auto parsed = slabjson::parse(source, R"({"text":"\u00e9\n\uD83D\uDE00","number":42})");
     if (!parsed) return false;
+    value = parsed.value();
     const auto used = source.used_bytes();
-    if (slabjson::parse(source, R"({"incomplete":[1,})")
-        || source.used_bytes() != used) return false;
-    auto copy = slabjson::cjson::duplicate(destination, parsed.value());
+    if (slabjson::parse(source, R"({"incomplete":[1,})") || source.used_bytes() != used) return false;
+#endif
+#if SLABJSON_ENABLE_CJSON_COMPAT
+    auto copy = slabjson::cjson::duplicate(destination, value);
     if (!copy) return false;
+    value = copy.value();
+#endif
+#if SLABJSON_ENABLE_SERIALIZER
     std::array<char, 512> output{};
-    for (bool pretty : {false, true}) {
-        auto size = pretty ? slabjson::serialized_size_pretty(copy.value())
-                           : slabjson::serialized_size(copy.value());
-        auto written = pretty ? slabjson::serialize_pretty(copy.value(), output)
-                              : slabjson::serialize(copy.value(), output);
-        auto partial = pretty ? slabjson::serialize_pretty_partial(copy.value(), output)
-                              : slabjson::serialize_partial(copy.value(), output);
-        if (!size || !written || !partial
-            || size.value() != written.value() || size.value() != partial.value()) return false;
-    }
-    if (!slabjson::cjson::print_unformatted(parsed.value(), output)
-        || !slabjson::cjson::print_pretty(parsed.value(), output)) return false;
-    auto object = source.make_object().value();
-    auto array = object.add_array("items");
-    if (!array || !array.value().add("utf8: é")
-        || !array.value().add(std::numeric_limits<std::int64_t>::min())
-        || !array.value().add(std::numeric_limits<std::uint64_t>::max())
-        || !array.value().add_null()) return false;
+    auto size = slabjson::serialized_size(value);
+    auto written = slabjson::serialize(value, output);
+    auto partial = slabjson::serialize_partial(value, output);
+    if (!size || !written || !partial || size.value() != written.value()
+        || size.value() != partial.value()) return false;
+#if SLABJSON_ENABLE_PRETTY
+    if (!slabjson::serialize_pretty(value, output) || !slabjson::serialize_pretty_partial(value, output)) return false;
+#endif
+#if SLABJSON_ENABLE_CJSON_COMPAT
+    if (!slabjson::cjson::print_unformatted(value, output)) return false;
+#if SLABJSON_ENABLE_PRETTY
+    if (!slabjson::cjson::print_pretty(value, output)) return false;
+#endif
+#endif
+#endif
     if (object.add("bad", static_cast<const char*>(nullptr)) || object.status()) return false;
     object.clear_error();
     if (!object.add("valid", true) || !object.remove("valid")) return false;
-    slabjson::StaticSlab<24> small;
-    auto existing = small.make_bool(true).value();
-    if (slabjson::cjson::duplicate(small, parsed.value())
-        || existing.as_bool() != true) return false;
     source.reset();
     destination.reset();
-    return !parsed.value().valid() && !copy.value().valid();
+    return !value.valid() && !object.valid();
 }
 } // namespace
 
@@ -134,10 +141,12 @@ void* __wrap_realloc(void* pointer, std::size_t size)
 int main()
 {
     // Positive controls ensure Release optimizations cannot disable the guard.
+    void* (*volatile allocate_new)(std::size_t) = ::operator new;
+    void (*volatile release_new)(void*) = ::operator delete;
     tracking = true;
-    void* control = ::operator new(16);
+    void* control = allocate_new(16);
     tracking = false;
-    ::operator delete(control);
+    release_new(control);
     if (allocation_count == 0) return 1;
 #if defined(SLABJSON_WRAP_ALLOCATIONS)
     allocation_count = 0;

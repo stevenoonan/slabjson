@@ -8,6 +8,13 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Optional `COMPACT32` and `INTEGER32` numeric modes with 16-byte nodes, native
+  numeric aliases (`int_t`, `uint_t`, optional `float_t`) and accessors, and
+  compile-time rejection of wider construction.
+- Independent parser, serializer, pretty-output, and cJSON compatibility
+  switches, installed build configuration, and size-oriented MCU presets.
+- Repeatable Cortex-M4 footprint reports with linked-size and dependency
+  checks, DOM consumption, buffer budgets, and compiler stack reports.
 - Sticky first-error status for object and array additions, with shared slab
   status checks and explicit error clearing.
 - Standalone JSONTestSuite conformance, allocation guard tests, and bounded
@@ -15,6 +22,10 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Parsing uses a bounded array of eight-byte container frames instead of
+  recursion, with a configurable compiled maximum depth.
+- Opt-in size optimization shares serializer traversal across measurement and
+  output while retaining transactional and partial serialization contracts.
 - Addition results may be intentionally deferred and checked once through the
   containing object, array, or slab status.
 - Parsing and programmatic string construction share UTF-8 sequence validation
@@ -27,6 +38,8 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Serializer string slices avoid a throwing standard-library bounds path that
+  could retain exception and allocation support in embedded executables.
 - cJSON printing checks the terminating NUL for slab overlap before writing,
   preventing corruption when the output buffer immediately precedes the slab.
 - Floating-point negative zero serializes as `-0.0`, preserving its sign and

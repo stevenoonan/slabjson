@@ -62,6 +62,15 @@ set(configure_command
     "-DCMAKE_EXE_LINKER_FLAGS=${SLABJSON_EXE_LINKER_FLAGS}"
     ${consumer_arguments}
 )
+foreach(setting NUMBER_MODE ENABLE_PARSER ENABLE_SERIALIZER ENABLE_PRETTY ENABLE_CJSON_COMPAT OPTIMIZE_SIZE MAX_PARSER_DEPTH)
+    if(DEFINED SLABJSON_${setting})
+        if(SLABJSON_CONSUMER_MODE STREQUAL "installed")
+            list(APPEND configure_command "-DEXPECTED_${setting}=${SLABJSON_${setting}}")
+        else()
+            list(APPEND configure_command "-DSLABJSON_${setting}=${SLABJSON_${setting}}")
+        endif()
+    endif()
+endforeach()
 if(SLABJSON_GENERATOR_PLATFORM)
     list(APPEND configure_command -A "${SLABJSON_GENERATOR_PLATFORM}")
 endif()

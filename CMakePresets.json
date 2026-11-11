@@ -49,13 +49,41 @@
         "CMAKE_CXX_FLAGS": "-fno-exceptions -fno-rtti",
         "SLABJSON_ENABLE_EXCEPTIONS": "OFF"
       }
+    },
+    {
+      "name": "mcu32",
+      "displayName": "mcu32",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "MinSizeRel",
+        "SLABJSON_NUMBER_MODE": "COMPACT32",
+        "SLABJSON_OPTIMIZE_SIZE": "ON",
+        "SLABJSON_MAX_PARSER_DEPTH": "16",
+        "SLABJSON_ENABLE_PRETTY": "OFF",
+        "SLABJSON_ENABLE_CJSON_COMPAT": "OFF"
+      }
+    },
+    {
+      "name": "mcu-integer",
+      "displayName": "mcu-integer",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "MinSizeRel",
+        "SLABJSON_NUMBER_MODE": "INTEGER32",
+        "SLABJSON_OPTIMIZE_SIZE": "ON",
+        "SLABJSON_MAX_PARSER_DEPTH": "16",
+        "SLABJSON_ENABLE_PRETTY": "OFF",
+        "SLABJSON_ENABLE_CJSON_COMPAT": "OFF"
+      }
     }
   ],
   "buildPresets": [
     { "name": "debug", "configurePreset": "debug" },
     { "name": "release", "configurePreset": "release" },
     { "name": "sanitizer", "configurePreset": "sanitizer" },
-    { "name": "no-exceptions", "configurePreset": "no-exceptions" }
+    { "name": "no-exceptions", "configurePreset": "no-exceptions" },
+    { "name": "mcu32", "configurePreset": "mcu32" },
+    { "name": "mcu-integer", "configurePreset": "mcu-integer" }
   ],
   "testPresets": [
     {
@@ -77,6 +105,16 @@
     {
       "name": "no-exceptions",
       "configurePreset": "no-exceptions",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "mcu32",
+      "configurePreset": "mcu32",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "mcu-integer",
+      "configurePreset": "mcu-integer",
       "output": { "outputOnFailure": true }
     }
   ]

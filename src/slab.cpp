@@ -111,7 +111,8 @@ Result<Value> Slab::make_bool(bool value) noexcept
     return make_value(id);
 }
 
-Result<Value> Slab::make_number(double value) noexcept
+#if SLABJSON_HAS_FLOAT
+Result<Value> Slab::make_number(float_t value) noexcept
 {
     if (!std::isfinite(value)) {
         return Error{ErrorCode::NonFiniteNumber, 0};
@@ -128,8 +129,9 @@ Result<Value> Slab::make_number(double value) noexcept
     node->payload.floating_point = value;
     return make_value(id);
 }
+#endif
 
-Result<Value> Slab::make_number(std::int64_t value) noexcept
+Result<Value> Slab::make_number(int_t value) noexcept
 {
     auto node_result = allocate_node(ValueType::Number);
     if (!node_result) {
@@ -143,7 +145,7 @@ Result<Value> Slab::make_number(std::int64_t value) noexcept
     return make_value(id);
 }
 
-Result<Value> Slab::make_number(std::uint64_t value) noexcept
+Result<Value> Slab::make_number(uint_t value) noexcept
 {
     auto node_result = allocate_node(ValueType::Number);
     if (!node_result) {
@@ -237,6 +239,11 @@ Result<Slab::NodeAllocation> Slab::allocate_node_with_pointer(
     auto* location = storage_.data() + static_cast<std::size_t>(id) * sizeof(Node);
     auto* node = ::new (static_cast<void*>(location)) Node{};
     node->type = type;
+    if (type == ValueType::Array || type == ValueType::Object) {
+        std::construct_at(&node->payload.children);
+    } else if (type == ValueType::String) {
+        std::construct_at(&node->payload.string_value);
+    }
     ++node_count_;
     return NodeAllocation{id, node};
 }
@@ -386,12 +393,12 @@ void Slab::append_child_unchecked(NodeId parent_id, NodeId child_id) noexcept
 
     child->parent = parent_id;
     child->next_sibling = kInvalidNodeId;
-    if (parent->last_child == kInvalidNodeId) {
-        parent->first_child = child_id;
+    if (parent->last_child() == kInvalidNodeId) {
+        parent->first_child() = child_id;
     } else {
-        node_for(parent->last_child, generation_)->next_sibling = child_id;
+        node_for(parent->last_child(), generation_)->next_sibling = child_id;
     }
-    parent->last_child = child_id;
+    parent->last_child() = child_id;
 }
 
 Slab::Checkpoint Slab::checkpoint() const noexcept

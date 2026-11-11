@@ -1,5 +1,7 @@
 #pragma once
 
+#include <slabjson/numbers.hpp>
+
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
@@ -35,31 +37,40 @@ public:
     void clear_error() noexcept;
     void reset() noexcept;
 
+    // Use this with key/string lengths to budget fixed DOM storage.
+    [[nodiscard]] static constexpr std::size_t node_size_bytes() noexcept { return sizeof(Node); }
     [[nodiscard]] std::size_t used_bytes() const noexcept;
     [[nodiscard]] std::size_t capacity_bytes() const noexcept;
     [[nodiscard]] std::size_t remaining_bytes() const noexcept;
 
     [[nodiscard]] Result<Value> make_null() noexcept;
     [[nodiscard]] Result<Value> make_bool(bool value) noexcept;
-    [[nodiscard]] Result<Value> make_number(std::int64_t value) noexcept;
-    [[nodiscard]] Result<Value> make_number(std::uint64_t value) noexcept;
-    [[nodiscard]] Result<Value> make_number(double value) noexcept;
+    [[nodiscard]] Result<Value> make_number(int_t value) noexcept;
+    [[nodiscard]] Result<Value> make_number(uint_t value) noexcept;
+#if SLABJSON_HAS_FLOAT
+    [[nodiscard]] Result<Value> make_number(float_t value) noexcept;
+#endif
 
     template <std::signed_integral T>
         requires (!std::same_as<std::remove_cv_t<T>, bool>
-            && !std::same_as<std::remove_cv_t<T>, std::int64_t>)
+            && !std::same_as<std::remove_cv_t<T>, int_t>
+            && sizeof(T) <= sizeof(int_t))
     [[nodiscard]] Result<Value> make_number(T value) noexcept
     {
-        return make_number(static_cast<std::int64_t>(value));
+        return make_number(static_cast<int_t>(value));
     }
 
     template <std::unsigned_integral T>
         requires (!std::same_as<std::remove_cv_t<T>, bool>
-            && !std::same_as<std::remove_cv_t<T>, std::uint64_t>)
+            && !std::same_as<std::remove_cv_t<T>, uint_t>
+            && sizeof(T) <= sizeof(uint_t))
     [[nodiscard]] Result<Value> make_number(T value) noexcept
     {
-        return make_number(static_cast<std::uint64_t>(value));
+        return make_number(static_cast<uint_t>(value));
     }
+
+    template <detail::UnsupportedNumber T>
+    Result<Value> make_number(T) noexcept = delete;
 
     [[nodiscard]] Result<Value> make_string(std::string_view value) noexcept;
     [[nodiscard]] Result<Object> make_object() noexcept;
@@ -86,10 +97,17 @@ private:
     };
 
     union Payload {
+        struct Children {
+            NodeId first{kInvalidNodeId};
+            NodeId last{kInvalidNodeId};
+        };
+        Children children;
         bool bool_value;
-        std::int64_t signed_integer;
-        std::uint64_t unsigned_integer;
-        double floating_point;
+        int_t signed_integer;
+        uint_t unsigned_integer;
+#if SLABJSON_HAS_FLOAT
+        float_t floating_point;
+#endif
         StringRef string_value;
 
         constexpr Payload() noexcept
@@ -104,12 +122,27 @@ private:
         std::uint8_t key_flags{0};
         std::uint8_t value_flags{0};
         NodeId parent{kInvalidNodeId};
-        NodeId first_child{kInvalidNodeId};
-        NodeId last_child{kInvalidNodeId};
         NodeId next_sibling{kInvalidNodeId};
         StringRef key{};
+#if SLABJSON_FULL_NUMBERS
+        // Retain the full-mode 24-byte layout even on ABIs with four-byte
+        // double alignment. On eight-byte ABIs this occupies padding.
+        std::uint32_t reserved{0};
+#endif
         Payload payload{};
+
+        // Only containers have an active children member.
+        [[nodiscard]] NodeId& first_child() noexcept { return payload.children.first; }
+        [[nodiscard]] NodeId first_child() const noexcept { return payload.children.first; }
+        [[nodiscard]] NodeId& last_child() noexcept { return payload.children.last; }
+        [[nodiscard]] NodeId last_child() const noexcept { return payload.children.last; }
     };
+
+#if SLABJSON_FULL_NUMBERS
+    static_assert(sizeof(Node) == 24);
+#else
+    static_assert(sizeof(Node) == 16);
+#endif
 
     struct Checkpoint {
         std::size_t string_bytes_used;

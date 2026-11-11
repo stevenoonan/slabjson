@@ -86,7 +86,8 @@ std::optional<bool> Value::as_bool() const noexcept
     return node->payload.bool_value;
 }
 
-std::optional<double> Value::as_number() const noexcept
+#if SLABJSON_HAS_FLOAT
+std::optional<float_t> Value::as_number() const noexcept
 {
     const auto* node = slab_ == nullptr
         ? nullptr
@@ -96,14 +97,15 @@ std::optional<double> Value::as_number() const noexcept
     }
     switch (Slab::node_number_kind(*node)) {
     case NumberKind::SignedInteger:
-        return static_cast<double>(node->payload.signed_integer);
+        return static_cast<float_t>(node->payload.signed_integer);
     case NumberKind::UnsignedInteger:
-        return static_cast<double>(node->payload.unsigned_integer);
+        return static_cast<float_t>(node->payload.unsigned_integer);
     case NumberKind::FloatingPoint:
         return node->payload.floating_point;
     }
     return std::nullopt;
 }
+#endif
 
 std::optional<NumberKind> Value::number_kind() const noexcept
 {
@@ -116,7 +118,7 @@ std::optional<NumberKind> Value::number_kind() const noexcept
     return Slab::node_number_kind(*node);
 }
 
-std::optional<std::int64_t> Value::as_int64() const noexcept
+std::optional<int_t> Value::as_integer() const noexcept
 {
     const auto* node = slab_ == nullptr
         ? nullptr
@@ -130,9 +132,9 @@ std::optional<std::int64_t> Value::as_int64() const noexcept
         return node->payload.signed_integer;
     case NumberKind::UnsignedInteger:
         if (node->payload.unsigned_integer
-            <= static_cast<std::uint64_t>(
-                std::numeric_limits<std::int64_t>::max())) {
-            return static_cast<std::int64_t>(
+            <= static_cast<uint_t>(
+                std::numeric_limits<int_t>::max())) {
+            return static_cast<int_t>(
                 node->payload.unsigned_integer);
         }
         return std::nullopt;
@@ -142,7 +144,7 @@ std::optional<std::int64_t> Value::as_int64() const noexcept
     return std::nullopt;
 }
 
-std::optional<std::uint64_t> Value::as_uint64() const noexcept
+std::optional<uint_t> Value::as_unsigned_integer() const noexcept
 {
     const auto* node = slab_ == nullptr
         ? nullptr
@@ -154,7 +156,7 @@ std::optional<std::uint64_t> Value::as_uint64() const noexcept
     switch (Slab::node_number_kind(*node)) {
     case NumberKind::SignedInteger:
         if (node->payload.signed_integer >= 0) {
-            return static_cast<std::uint64_t>(
+            return static_cast<uint_t>(
                 node->payload.signed_integer);
         }
         return std::nullopt;

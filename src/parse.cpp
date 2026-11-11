@@ -45,7 +45,7 @@ public:
             return Error{ErrorCode::ParseUnexpectedEnd, position_};
         }
 
-        auto value_result = parse_value(0);
+        auto value_result = parse_document();
         if (!value_result) {
             slab_.rollback(start);
             return value_result.error();
@@ -91,9 +91,9 @@ private:
         case '"':
             return parse_string_value();
         case '[':
-            return parse_array(depth);
+            return open_container(ValueType::Array, depth);
         case '{':
-            return parse_object(depth);
+            return open_container(ValueType::Object, depth);
         default:
             if (input_[position_] == '-'
                 || is_digit(input_[position_])) {
@@ -194,7 +194,7 @@ private:
 
         if (!floating_point) {
             if (negative) {
-                std::int64_t number = 0;
+                int_t number = 0;
                 const auto conversion =
                     std::from_chars(first, last, number);
                 if (conversion.ec != std::errc{}
@@ -204,7 +204,7 @@ private:
                 return with_offset(slab_.make_number(number), start);
             }
 
-            std::int64_t signed_number = 0;
+            int_t signed_number = 0;
             const auto signed_conversion =
                 std::from_chars(first, last, signed_number);
             if (signed_conversion.ec == std::errc{}
@@ -214,7 +214,7 @@ private:
                     start);
             }
 
-            std::uint64_t unsigned_number = 0;
+            uint_t unsigned_number = 0;
             const auto unsigned_conversion =
                 std::from_chars(first, last, unsigned_number);
             if (unsigned_conversion.ec != std::errc{}
@@ -226,7 +226,8 @@ private:
                 start);
         }
 
-        double number = 0.0;
+#if SLABJSON_HAS_FLOAT
+        float_t number = 0;
         const auto conversion = std::from_chars(
             first,
             last,
@@ -239,6 +240,9 @@ private:
         }
         auto value = slab_.make_number(number);
         return with_offset(value, start);
+#else
+        return Error{ErrorCode::ParseInvalidNumber, start};
+#endif
     }
 
     [[nodiscard]] Result<Value> parse_string_value() noexcept
@@ -260,131 +264,93 @@ private:
         return slab_.make_value(id);
     }
 
-    [[nodiscard]] Result<Value> parse_array(std::uint16_t depth) noexcept
+    [[nodiscard]] Result<Value> open_container(ValueType type, std::uint16_t depth) noexcept
     {
-        const std::size_t start = position_;
         if (depth >= options_.max_depth) {
-            return Error{ErrorCode::ParserDepthExceeded, start};
+            return Error{ErrorCode::ParserDepthExceeded, position_};
         }
-        ++position_;
-
-        auto array_result = slab_.make_array();
-        if (!array_result) {
-            return Error{array_result.error().code, start};
-        }
-        Array array = array_result.value();
-        const Value array_value = array.value();
-
-        skip_whitespace();
-        if (position_ == input_.size()) {
-            return Error{ErrorCode::ParseUnexpectedEnd, position_};
-        }
-        if (input_[position_] == ']') {
-            ++position_;
-            return array.value();
-        }
-
-        while (true) {
-            auto child_result = parse_value(
-                static_cast<std::uint16_t>(depth + 1));
-            if (!child_result) {
-                return child_result.error();
-            }
-            slab_.append_child_unchecked(
-                array_value.id_,
-                child_result.value().id_);
-
-            skip_whitespace();
-            if (position_ == input_.size()) {
-                return Error{ErrorCode::ParseUnexpectedEnd, position_};
-            }
-            if (input_[position_] == ']') {
-                ++position_;
-                return array.value();
-            }
-            if (input_[position_] != ',') {
-                return Error{ErrorCode::ParseUnexpectedToken, position_};
-            }
-            ++position_;
-            skip_whitespace();
-            if (position_ == input_.size()) {
-                return Error{ErrorCode::ParseUnexpectedEnd, position_};
-            }
-        }
+        const auto start = position_++;
+        auto node = slab_.allocate_node(type);
+        if (!node) { return Error{node.error().code, start}; }
+        return slab_.make_value(node.value());
     }
 
-    [[nodiscard]] Result<Value> parse_object(std::uint16_t depth) noexcept
+    // Each open container needs eight bytes, independently of the C++ call stack.
+    enum class State : std::uint8_t { First, Next, Separator };
+    struct Frame {
+        Slab::NodeId container;
+        Slab::StringRef key{};
+        std::uint8_t key_flags{0};
+        State state{State::First};
+    };
+    static_assert(sizeof(Frame) == 8);
+
+    [[nodiscard]] Result<Value> parse_document() noexcept
     {
-        const std::size_t start = position_;
-        if (depth >= options_.max_depth) {
-            return Error{ErrorCode::ParserDepthExceeded, start};
-        }
-        ++position_;
+        auto root = parse_value(0);
+        if (!root) { return root.error(); }
+        if (!root.value().is_array() && !root.value().is_object()) { return root; }
 
-        auto object_result = slab_.make_object();
-        if (!object_result) {
-            return Error{object_result.error().code, start};
-        }
-        Object object = object_result.value();
-        const Value object_value = object.value();
-
-        skip_whitespace();
-        if (position_ == input_.size()) {
-            return Error{ErrorCode::ParseUnexpectedEnd, position_};
-        }
-        if (input_[position_] == '}') {
-            ++position_;
-            return object.value();
-        }
-
-        while (true) {
-            if (input_[position_] != '"') {
-                return Error{ErrorCode::ParseUnexpectedToken, position_};
-            }
-            auto key_result = parse_string();
-            if (!key_result) {
-                return key_result.error();
-            }
-
+        Frame frames[kMaxParserDepth];
+        std::uint16_t depth = 1;
+        frames[0].container = root.value().id_;
+        while (depth != 0) {
+            Frame& frame = frames[depth - 1];
+            const bool object = slab_.node_at_unchecked(frame.container)->type == ValueType::Object;
+            const char close = object ? '}' : ']';
             skip_whitespace();
             if (position_ == input_.size()) {
                 return Error{ErrorCode::ParseUnexpectedEnd, position_};
             }
-            if (input_[position_] != ':') {
-                return Error{ErrorCode::ParseUnexpectedToken, position_};
-            }
-            ++position_;
-
-            auto child_result = parse_value(
-                static_cast<std::uint16_t>(depth + 1));
-            if (!child_result) {
-                return child_result.error();
-            }
-            Slab::Node* child =
-                slab_.node_for(child_result.value().id_, slab_.generation_);
-            child->key = key_result.value().ref;
-            child->key_flags = key_result.value().flags;
-            slab_.append_child_unchecked(
-                object_value.id_,
-                child_result.value().id_);
-
-            skip_whitespace();
-            if (position_ == input_.size()) {
-                return Error{ErrorCode::ParseUnexpectedEnd, position_};
-            }
-            if (input_[position_] == '}') {
+            if (frame.state != State::Next && input_[position_] == close) {
                 ++position_;
-                return object.value();
+                --depth;
+                continue;
             }
-            if (input_[position_] != ',') {
-                return Error{ErrorCode::ParseUnexpectedToken, position_};
+            if (frame.state == State::Separator) {
+                if (input_[position_] != ',') {
+                    return Error{ErrorCode::ParseUnexpectedToken, position_};
+                }
+                ++position_;
+                frame.state = State::Next;
+                continue;
             }
-            ++position_;
-            skip_whitespace();
-            if (position_ == input_.size()) {
-                return Error{ErrorCode::ParseUnexpectedEnd, position_};
+            if (object) {
+                if (input_[position_] != '"') {
+                    return Error{ErrorCode::ParseUnexpectedToken, position_};
+                }
+                auto key = parse_string();
+                if (!key) { return key.error(); }
+                frame.key = key.value().ref;
+                frame.key_flags = key.value().flags;
+                skip_whitespace();
+                if (position_ == input_.size()) {
+                    return Error{ErrorCode::ParseUnexpectedEnd, position_};
+                }
+                if (input_[position_] != ':') {
+                    return Error{ErrorCode::ParseUnexpectedToken, position_};
+                }
+                ++position_;
+            }
+            auto child = parse_value(depth);
+            if (!child) { return child.error(); }
+            auto* node = slab_.node_at_unchecked(child.value().id_);
+            if (object) {
+                node->key = frame.key;
+                node->key_flags = frame.key_flags;
+            }
+            slab_.append_child_unchecked(frame.container, child.value().id_);
+            frame.state = State::Separator;
+            if (node->type == ValueType::Array || node->type == ValueType::Object) {
+                // open_container already enforces the runtime limit. Keep the
+                // frame-array bound explicit as well, including depth-one builds.
+                if (depth >= kMaxParserDepth) {
+                    return Error{ErrorCode::InternalError, position_};
+                }
+                frames[depth++] = Frame{child.value().id_};
             }
         }
+        return root;
     }
 
     [[nodiscard]] Result<ParsedString> parse_string() noexcept

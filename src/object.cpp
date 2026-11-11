@@ -122,7 +122,7 @@ Result<void> Object::add(std::string_view key, bool bool_value) noexcept
         [&](Value child) noexcept { return add(key, child); });
 }
 
-Result<void> Object::add(std::string_view key, std::int64_t number_value) noexcept
+Result<void> Object::add(std::string_view key, int_t number_value) noexcept
 {
     return detail::ContainerBuilder::add<void>(
         *this, slab_,
@@ -130,7 +130,7 @@ Result<void> Object::add(std::string_view key, std::int64_t number_value) noexce
         [&](Value child) noexcept { return add(key, child); });
 }
 
-Result<void> Object::add(std::string_view key, std::uint64_t number_value) noexcept
+Result<void> Object::add(std::string_view key, uint_t number_value) noexcept
 {
     return detail::ContainerBuilder::add<void>(
         *this, slab_,
@@ -138,13 +138,15 @@ Result<void> Object::add(std::string_view key, std::uint64_t number_value) noexc
         [&](Value child) noexcept { return add(key, child); });
 }
 
-Result<void> Object::add(std::string_view key, double number_value) noexcept
+#if SLABJSON_HAS_FLOAT
+Result<void> Object::add(std::string_view key, float_t number_value) noexcept
 {
     return detail::ContainerBuilder::add<void>(
         *this, slab_,
         [&]() noexcept { return slab_->make_number(number_value); },
         [&](Value child) noexcept { return add(key, child); });
 }
+#endif
 
 Result<void> Object::add_null(std::string_view key) noexcept
 {
@@ -179,7 +181,7 @@ std::optional<Value> Object::find(std::string_view key) const noexcept
         return std::nullopt;
     }
 
-    NodeId child_id = object_node->first_child;
+    NodeId child_id = object_node->first_child();
     while (child_id != Slab::kInvalidNodeId) {
         const auto* child = slab_->node_for(child_id, generation_);
         if (child == nullptr) {
@@ -227,7 +229,7 @@ Result<bool> Object::get_bool(std::string_view key) const noexcept
     return *converted;
 }
 
-Result<std::int64_t> Object::get_int64(
+Result<int_t> Object::get_integer(
     std::string_view key) const noexcept
 {
     auto value = find_required(*this, key);
@@ -235,14 +237,14 @@ Result<std::int64_t> Object::get_int64(
         return value.error();
     }
 
-    auto converted = value.value().as_int64();
+    auto converted = value.value().as_integer();
     if (!converted) {
         return Error{ErrorCode::TypeMismatch, 0};
     }
     return *converted;
 }
 
-Result<std::uint64_t> Object::get_uint64(
+Result<uint_t> Object::get_unsigned_integer(
     std::string_view key) const noexcept
 {
     auto value = find_required(*this, key);
@@ -250,14 +252,15 @@ Result<std::uint64_t> Object::get_uint64(
         return value.error();
     }
 
-    auto converted = value.value().as_uint64();
+    auto converted = value.value().as_unsigned_integer();
     if (!converted) {
         return Error{ErrorCode::TypeMismatch, 0};
     }
     return *converted;
 }
 
-Result<double> Object::get_number(std::string_view key) const noexcept
+#if SLABJSON_HAS_FLOAT
+Result<float_t> Object::get_number(std::string_view key) const noexcept
 {
     auto value = find_required(*this, key);
     if (!value) {
@@ -270,6 +273,7 @@ Result<double> Object::get_number(std::string_view key) const noexcept
     }
     return *converted;
 }
+#endif
 
 Result<Object> Object::get_object(std::string_view key) const noexcept
 {
@@ -312,7 +316,7 @@ Result<void> Object::remove(std::string_view key) noexcept
     }
 
     NodeId previous_id = Slab::kInvalidNodeId;
-    NodeId child_id = object_node->first_child;
+    NodeId child_id = object_node->first_child();
     while (child_id != Slab::kInvalidNodeId) {
         auto* child = slab_->node_for(child_id, generation_);
         if (child == nullptr) {
@@ -321,13 +325,13 @@ Result<void> Object::remove(std::string_view key) noexcept
 
         if (slab_->view_string(child->key) == key) {
             if (previous_id == Slab::kInvalidNodeId) {
-                object_node->first_child = child->next_sibling;
+                object_node->first_child() = child->next_sibling;
             } else {
                 slab_->node_for(previous_id, generation_)->next_sibling =
                     child->next_sibling;
             }
-            if (object_node->last_child == child_id) {
-                object_node->last_child = previous_id;
+            if (object_node->last_child() == child_id) {
+                object_node->last_child() = previous_id;
             }
             child->parent = Slab::kInvalidNodeId;
             child->next_sibling = Slab::kInvalidNodeId;
@@ -353,7 +357,7 @@ std::size_t Object::size() const noexcept
     }
 
     std::size_t count = 0;
-    NodeId child_id = object_node->first_child;
+    NodeId child_id = object_node->first_child();
     while (child_id != Slab::kInvalidNodeId) {
         const auto* child = slab_->node_for(child_id, generation_);
         if (child == nullptr) {
@@ -372,7 +376,7 @@ bool Object::empty() const noexcept
         : slab_->node_for(id_, generation_);
     return node == nullptr
         || node->type != ValueType::Object
-        || node->first_child == Slab::kInvalidNodeId;
+        || node->first_child() == Slab::kInvalidNodeId;
 }
 
 Object::iterator Object::begin() const noexcept
@@ -385,7 +389,7 @@ Object::iterator Object::begin() const noexcept
     }
     return ObjectIterator{
         slab_,
-        object_node->first_child,
+        object_node->first_child(),
         generation_,
     };
 }

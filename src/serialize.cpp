@@ -151,6 +151,41 @@ private:
     std::size_t position_{0};
 };
 
+#if SLABJSON_OPTIMIZE_SIZE
+// One concrete writer keeps measurement and output on the same traversal.
+class SharedWriter {
+public:
+    SharedWriter() noexcept = default;
+    explicit SharedWriter(std::span<char> output) noexcept : output_(output), counting_(false) {}
+    [[nodiscard]] bool append(char value) noexcept { return append(std::string_view{&value, 1}); }
+    [[nodiscard]] bool append(std::string_view text) noexcept
+    {
+        if (text.size() > std::numeric_limits<std::size_t>::max() - position_) { return false; }
+        if (!counting_) {
+            if (text.size() > output_.size() - position_) { return false; }
+            if (!text.empty()) { std::memcpy(output_.data() + position_, text.data(), text.size()); }
+        }
+        position_ += text.size();
+        return true;
+    }
+    [[nodiscard]] bool append_repeated(char value, std::size_t count) noexcept
+    {
+        if (count > std::numeric_limits<std::size_t>::max() - position_) { return false; }
+        if (!counting_) {
+            if (count > output_.size() - position_) { return false; }
+            if (count) { std::memset(output_.data() + position_, value, count); }
+        }
+        position_ += count;
+        return true;
+    }
+    [[nodiscard]] std::size_t size() const noexcept { return position_; }
+private:
+    std::span<char> output_{};
+    std::size_t position_{0};
+    bool counting_{true};
+};
+#endif
+
 class Serializer {
 public:
     explicit Serializer(
@@ -160,15 +195,26 @@ public:
         : slab_(value.slab_)
         , root_id_(value.id_)
         , generation_(value.generation_)
+#if SLABJSON_ENABLE_PRETTY
         , pretty_(pretty)
         , indent_spaces_(indent_spaces)
+#endif
     {
+#if !SLABJSON_ENABLE_PRETTY
+        (void)pretty;
+        (void)indent_spaces;
+#endif
     }
 
     [[nodiscard]] Result<std::size_t> measure() const noexcept
     {
+#if SLABJSON_OPTIMIZE_SIZE
+        SharedWriter writer;
+        return write(writer);
+#else
         CountingWriter writer;
         return write<true, true>(writer);
+#endif
     }
 
     [[nodiscard]] Result<std::size_t> write_partial_to(
@@ -178,8 +224,13 @@ public:
             return Error{ErrorCode::InvalidArgument, 0};
         }
 
+#if SLABJSON_OPTIMIZE_SIZE
+        SharedWriter writer{output};
+        return write(writer);
+#else
         CheckedWriter writer{output};
         return write<true, true>(writer);
+#endif
     }
 
     [[nodiscard]] Result<std::size_t> write_prevalidated_to(
@@ -189,16 +240,28 @@ public:
             return Error{ErrorCode::InvalidArgument, 0};
         }
 
+#if SLABJSON_OPTIMIZE_SIZE
+        SharedWriter writer{output};
+        return write(writer);
+#else
         UncheckedWriter writer{output};
         return write<false, false>(writer);
+#endif
     }
 
 private:
     using NodeId = Slab::NodeId;
 
+#if SLABJSON_OPTIMIZE_SIZE
+    [[nodiscard]] Result<std::size_t> write(SharedWriter& writer) const noexcept
+    {
+        constexpr bool ValidateUtf8 = true;
+        constexpr bool ValidateGraph = true;
+#else
     template<bool ValidateUtf8, bool ValidateGraph, typename Writer>
     [[nodiscard]] Result<std::size_t> write(Writer& writer) const noexcept
     {
+#endif
         if (slab_ == nullptr) {
             return Error{ErrorCode::InvalidHandle, 0};
         }
@@ -261,11 +324,11 @@ private:
                     return Error{ErrorCode::OutputCapacityExceeded, 0};
                 }
 
-                if (current->first_child != Slab::kInvalidNodeId) {
+                if (current->first_child() != Slab::kInvalidNodeId) {
                     const Slab::Node* child =
                         ValidateGraph
-                            ? slab_->node_for(current->first_child, generation_)
-                            : slab_->node_at_unchecked(current->first_child);
+                            ? slab_->node_for(current->first_child(), generation_)
+                            : slab_->node_at_unchecked(current->first_child());
                     if constexpr (ValidateGraph) {
                         if (child == nullptr || child->parent != current_id) {
                             return Error{ErrorCode::InternalError, 0};
@@ -289,7 +352,7 @@ private:
                             return prefix_result.error();
                         }
                     }
-                    current_id = current->first_child;
+                    current_id = current->first_child();
                     ++depth;
                     continue;
                 }
@@ -391,7 +454,7 @@ private:
         Writer& writer,
         const Slab::Node& node) const noexcept
     {
-        char buffer[64];
+        char buffer[SLABJSON_HAS_FLOAT ? 64 : 12];
         std::to_chars_result result{};
         switch (Slab::node_number_kind(node)) {
         case NumberKind::SignedInteger:
@@ -407,6 +470,7 @@ private:
                 node.payload.unsigned_integer);
             break;
         case NumberKind::FloatingPoint:
+#if SLABJSON_HAS_FLOAT
             if (!std::isfinite(node.payload.floating_point)) {
                 return Error{ErrorCode::NonFiniteNumber, 0};
             }
@@ -423,6 +487,9 @@ private:
                 node.payload.floating_point,
                 std::chars_format::general);
             break;
+#else
+            return Error{ErrorCode::InternalError, 0};
+#endif
         }
         if (result.ec != std::errc{}) {
             return Error{ErrorCode::InternalError, 0};
@@ -516,13 +583,15 @@ private:
             if (escape.empty()) {
                 continue;
             }
-            if (!writer.append(value.substr(run_start, index - run_start))
+            // Both offsets are established by this loop. Avoid substr's
+            // throwing bounds path, which can pull exception support into MCU firmware.
+            if (!writer.append(std::string_view{value.data() + run_start, index - run_start})
                 || !writer.append(escape)) {
                 return Error{ErrorCode::OutputCapacityExceeded, 0};
             }
             run_start = index + 1;
         }
-        if (!writer.append(value.substr(run_start))) {
+        if (!writer.append(std::string_view{value.data() + run_start, value.size() - run_start})) {
             return Error{ErrorCode::OutputCapacityExceeded, 0};
         }
         if (!writer.append('"')) {
@@ -558,6 +627,7 @@ private:
         Writer& writer,
         std::size_t depth) const noexcept
     {
+#if SLABJSON_ENABLE_PRETTY
         if (indent_spaces_ != 0
             && depth > std::numeric_limits<std::size_t>::max()
                     / indent_spaces_) {
@@ -566,6 +636,11 @@ private:
         const std::size_t count =
             depth * static_cast<std::size_t>(indent_spaces_);
         return writer.append_repeated(' ', count);
+#else
+        (void)writer;
+        (void)depth;
+        return true;
+#endif
     }
 
     [[nodiscard]] bool overlaps_slab(std::span<char> output) const noexcept
@@ -587,8 +662,13 @@ private:
     Slab* slab_;
     NodeId root_id_;
     std::uint32_t generation_;
+#if SLABJSON_ENABLE_PRETTY
     bool pretty_;
     std::uint8_t indent_spaces_;
+#else
+    static constexpr bool pretty_ = false;
+    static constexpr std::uint8_t indent_spaces_ = 0;
+#endif
 };
 
 } // namespace detail
@@ -598,12 +678,14 @@ Result<std::size_t> serialized_size(Value value) noexcept
     return detail::Serializer{value}.measure();
 }
 
+#if SLABJSON_ENABLE_PRETTY
 Result<std::size_t> serialized_size_pretty(
     Value value,
     std::uint8_t indent_spaces) noexcept
 {
     return detail::Serializer{value, true, indent_spaces}.measure();
 }
+#endif
 
 Result<std::size_t> serialize(Value value, std::span<char> output) noexcept
 {
@@ -625,6 +707,7 @@ Result<std::size_t> serialize_partial(
     return detail::Serializer{value}.write_partial_to(output);
 }
 
+#if SLABJSON_ENABLE_PRETTY
 Result<std::size_t> serialize_pretty(
     Value value,
     std::span<char> output,
@@ -640,7 +723,9 @@ Result<std::size_t> serialize_pretty(
     }
     return serializer.write_prevalidated_to(output);
 }
+#endif
 
+#if SLABJSON_ENABLE_PRETTY
 Result<std::size_t> serialize_pretty_partial(
     Value value,
     std::span<char> output,
@@ -652,5 +737,6 @@ Result<std::size_t> serialize_pretty_partial(
         indent_spaces,
     }.write_partial_to(output);
 }
+#endif
 
 } // namespace slabjson

@@ -1,5 +1,11 @@
 #pragma once
 
+#include <slabjson/config.hpp>
+
+#if SLABJSON_ENABLE_CJSON_COMPAT
+
+#include <slabjson/numbers.hpp>
+
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
@@ -23,27 +29,34 @@ using Item = Value;
 [[nodiscard]] Result<Item> create_bool(Slab& slab, bool value) noexcept;
 [[nodiscard]] Result<Item> create_number(
     Slab& slab,
-    std::int64_t value) noexcept;
+    int_t value) noexcept;
 [[nodiscard]] Result<Item> create_number(
     Slab& slab,
-    std::uint64_t value) noexcept;
-[[nodiscard]] Result<Item> create_number(Slab& slab, double value) noexcept;
+    uint_t value) noexcept;
+#if SLABJSON_HAS_FLOAT
+[[nodiscard]] Result<Item> create_number(Slab& slab, float_t value) noexcept;
+#endif
 
 template <std::signed_integral T>
     requires (!std::same_as<std::remove_cv_t<T>, bool>
-        && !std::same_as<std::remove_cv_t<T>, std::int64_t>)
+        && !std::same_as<std::remove_cv_t<T>, int_t>
+            && sizeof(T) <= sizeof(int_t))
 [[nodiscard]] Result<Item> create_number(Slab& slab, T value) noexcept
 {
-    return create_number(slab, static_cast<std::int64_t>(value));
+    return create_number(slab, static_cast<int_t>(value));
 }
 
 template <std::unsigned_integral T>
     requires (!std::same_as<std::remove_cv_t<T>, bool>
-        && !std::same_as<std::remove_cv_t<T>, std::uint64_t>)
+        && !std::same_as<std::remove_cv_t<T>, uint_t>
+            && sizeof(T) <= sizeof(uint_t))
 [[nodiscard]] Result<Item> create_number(Slab& slab, T value) noexcept
 {
-    return create_number(slab, static_cast<std::uint64_t>(value));
+    return create_number(slab, static_cast<uint_t>(value));
 }
+
+template <detail::UnsupportedNumber T>
+Result<Item> create_number(Slab&, T) noexcept = delete;
 
 [[nodiscard]] Result<Item> create_string(
     Slab& slab,
@@ -85,26 +98,36 @@ template <std::unsigned_integral T>
 
 [[nodiscard]] std::optional<std::string_view> get_string_value(
     Item item) noexcept;
-[[nodiscard]] std::optional<double> get_number_value(Item item) noexcept;
+#if SLABJSON_HAS_FLOAT
+[[nodiscard]] std::optional<float_t> get_number_value(Item item) noexcept;
+#endif
 
+#if SLABJSON_ENABLE_PARSER
 [[nodiscard]] Result<Item> parse(
     Slab& slab,
     std::string_view input,
     ParseOptions options = {}) noexcept;
+#endif
 
 // Printing appends a NUL terminator and returns the JSON byte count without it.
+#if SLABJSON_ENABLE_SERIALIZER
 [[nodiscard]] Result<std::size_t> print_unformatted(
     Item item,
     std::span<char> output) noexcept;
+#endif
+#if SLABJSON_ENABLE_SERIALIZER && SLABJSON_ENABLE_PRETTY
 [[nodiscard]] Result<std::size_t> print_pretty(
     Item item,
     std::span<char> output,
     std::uint8_t indent_spaces = 2) noexcept;
+#endif
+#if SLABJSON_ENABLE_SERIALIZER
 [[nodiscard]] Result<std::size_t> print_preallocated(
     Item item,
     std::span<char> output,
     bool formatted,
     std::uint8_t indent_spaces = 2) noexcept;
+#endif
 
 [[nodiscard]] Result<Item> duplicate(
     Slab& destination,
@@ -131,3 +154,5 @@ template <std::unsigned_integral T>
 void delete_all(Slab& slab) noexcept;
 
 } // namespace slabjson::cjson
+
+#endif
