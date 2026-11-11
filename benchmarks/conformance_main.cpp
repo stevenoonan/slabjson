@@ -1,4 +1,5 @@
 #include "benchmark_support.hpp"
+#include "../tests/support/json_test_suite.hpp"
 
 #include <algorithm>
 #include <array>
@@ -265,72 +266,17 @@ struct Options {
 [[nodiscard]] bool run_json_test_suite(
     std::ostringstream& report)
 {
-    const std::filesystem::path directory{
+    report << "JSONTestSuite\ncategory\tfile\tslabjson\tcjson\n";
+    const auto results = slabjson::testing::run_json_test_suite(
         SLABJSON_JSON_TEST_SUITE_DIR,
-    };
-    std::vector<std::filesystem::path> paths;
-    for (const auto& entry :
-         std::filesystem::directory_iterator(directory)) {
-        if (entry.is_regular_file()
-            && entry.path().extension() == ".json") {
-            paths.push_back(entry.path());
-        }
-    }
-    std::sort(paths.begin(), paths.end());
-
-    std::size_t valid_count = 0;
-    std::size_t invalid_count = 0;
-    std::size_t implementation_count = 0;
-    bool success = true;
-    report << "JSONTestSuite\n"
-           << "category\tfile\tslabjson\tcjson\n";
-    for (const auto& path : paths) {
-        const std::string name = path.filename().string();
-        if (name.size() < 2 || name[1] != '_') {
-            continue;
-        }
-
-        const char category = name[0];
-        if (category != 'y'
-            && category != 'n'
-            && category != 'i') {
-            continue;
-        }
-
-        const std::string input = sb::read_file(path);
-        slabjson::StaticSlab<sb::kSlabCapacity> slab;
-        const bool slab_accepts =
-            static_cast<bool>(slabjson::parse(slab, input));
-        const bool cjson_accepts =
-            static_cast<bool>(sb::parse_cjson_full(input));
-
-        if (category == 'y') {
-            ++valid_count;
-            success = success && slab_accepts;
-        } else if (category == 'n') {
-            ++invalid_count;
-            success = success && !slab_accepts;
-        } else {
-            ++implementation_count;
-        }
-
-        report << category << '\t'
-               << name << '\t'
-               << (slab_accepts ? "accept" : "reject") << '\t'
-               << (cjson_accepts ? "accept" : "reject") << '\n';
-    }
-
-    const bool counts_match =
-        valid_count == 95
-        && invalid_count == 188
-        && implementation_count == 35;
-    success = success && counts_match;
-    report << "summary\tvalid=" << valid_count
-           << "\tinvalid=" << invalid_count
-           << "\timplementation_defined=" << implementation_count
-           << "\tcounts=" << (counts_match ? "ok" : "unexpected")
-           << '\n';
-    return success;
+        [&](char category, const auto& name, const auto& input, bool accepted) {
+            const bool cjson_accepts = static_cast<bool>(sb::parse_cjson_full(input));
+            report << category << '\t' << name << '\t'
+                   << (accepted ? "accept" : "reject") << '\t'
+                   << (cjson_accepts ? "accept" : "reject") << '\n';
+        });
+    results.print_summary(report);
+    return results.passed();
 }
 
 } // namespace
