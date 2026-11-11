@@ -193,7 +193,12 @@ std::size_t Array::size() const noexcept
 
 bool Array::empty() const noexcept
 {
-    return size() == 0;
+    const auto* node = slab_ == nullptr
+        ? nullptr
+        : slab_->node_for(id_, generation_);
+    return node == nullptr
+        || node->type != ValueType::Array
+        || node->first_child == Slab::kInvalidNodeId;
 }
 
 Array::iterator Array::begin() const noexcept

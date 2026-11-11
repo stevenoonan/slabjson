@@ -223,6 +223,9 @@ auto child = object.get_object("child");
 auto items = object.get_array("items");
 ```
 
+`empty()` checks the first child in constant time. `size()` traverses the
+children and takes linear time.
+
 Objects and arrays are iterable:
 
 ```cpp

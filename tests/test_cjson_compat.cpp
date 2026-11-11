@@ -29,6 +29,30 @@ int main()
 {
     namespace cjson = slabjson::cjson;
 
+    {
+        slabjson::StaticSlab<512> slab;
+        auto array = slab.make_array().value();
+        auto object = slab.make_object().value();
+        CHECK(array.empty());
+        CHECK(object.empty());
+        CHECK(array.add(true));
+        CHECK(object.add("last", false));
+        CHECK(!array.empty());
+        CHECK(!object.empty());
+        auto detached = cjson::detach_item_from_array(array, 0);
+        CHECK(detached);
+        CHECK(object.remove("last"));
+        CHECK(array.empty());
+        CHECK(object.empty());
+        if (detached) {
+            CHECK(array.add(detached.value()));
+            CHECK(!array.empty());
+        }
+        slab.reset();
+        CHECK(array.empty());
+        CHECK(object.empty());
+    }
+
     for (bool formatted : {false, true}) {
         for (bool preallocated : {false, true}) {
             alignas(std::max_align_t) std::array<std::byte, 256> storage{};
