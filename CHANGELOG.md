@@ -22,6 +22,8 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Object and array construction share status, allocation, attachment, and
   rollback handling through a private helper.
 - Object and array `empty()` checks inspect the first child in constant time.
+- Release tests derive versions from CMake project metadata and use isolated
+  fixtures with positive controls and specific rejection-message checks.
 
 ### Fixed
 
